@@ -3,8 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { colors } from '../theme/colors';
 
-const AUTH_ROUTES = new Set(['login', 'register']);
+const PUBLIC_ROUTES = new Set(['index', 'welcome', 'login', 'register']);
 
 function RootNavigator() {
   const { user, initializing } = useAuth();
@@ -14,19 +15,19 @@ function RootNavigator() {
   useEffect(() => {
     if (initializing) return;
     const currentRoute = segments[segments.length - 1] ?? 'index';
-    const inAuthRoute = AUTH_ROUTES.has(currentRoute);
+    const inPublicRoute = PUBLIC_ROUTES.has(currentRoute);
 
     if (!user && currentRoute === 'home') {
       router.replace('/login');
-    } else if (user && inAuthRoute) {
+    } else if (user && inPublicRoute) {
       router.replace('/home');
     }
   }, [user, initializing, segments, router]);
 
   if (initializing) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' }}>
-        <ActivityIndicator size="large" color="#5260D4" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -34,6 +35,7 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="welcome" />
       <Stack.Screen name="login" />
       <Stack.Screen name="register" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="home" />

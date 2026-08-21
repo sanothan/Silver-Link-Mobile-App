@@ -11,9 +11,12 @@ const AuthContext = createContext<AuthContextValue>({ user: null, initializing: 
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [initializing, setInitializing] = useState(true);
+  const [initializing, setInitializing] = useState(Boolean(auth));
 
   useEffect(() => {
+    if (!auth) {
+      return;
+    }
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setInitializing(false);
