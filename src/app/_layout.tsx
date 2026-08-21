@@ -1,4 +1,4 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, type Href, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -21,9 +21,9 @@ function RootNavigator() {
     if (!user && (currentRoute === 'home' || inElderlyRoutes)) {
       router.replace('/login');
     } else if (user && inPublicRoute) {
-      router.replace(profile?.role === 'elderly' ? '/(elderly)' : '/home');
+      router.replace((profile?.role === 'elderly' ? '/(elderly)' : profile?.role === 'volunteer' ? '/(volunteer)' : '/home') as Href);
     } else if (user && profile?.role !== 'elderly' && inElderlyRoutes) {
-      router.replace('/home');
+      router.replace((profile?.role === 'volunteer' ? '/(volunteer)' : '/home') as Href);
     }
   }, [user, profile, initializing, segments, router]);
 
@@ -43,6 +43,7 @@ function RootNavigator() {
       <Stack.Screen name="register" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="home" />
       <Stack.Screen name="(elderly)" />
+      <Stack.Screen name="(volunteer)" />
     </Stack>
   );
 }
