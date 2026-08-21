@@ -111,6 +111,16 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || resource.data.userId == request.auth.uid;
     }
 
+    // ---- complaints & safety reports ----
+    match /reports/{reportId} {
+      allow read: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow create: if hasPlatformAccess() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.status == 'open';
+      // Only an admin resolves a report; the reporter cannot alter it after filing.
+      allow update, delete: if isAdmin();
+    }
+
     // Deny anything not explicitly matched above.
     match /{document=**} {
       allow read, write: if false;
