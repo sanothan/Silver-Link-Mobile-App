@@ -22,6 +22,8 @@ function friendlyAuthError(error: unknown): string {
     case 'auth/user-not-found': return 'The email or password is incorrect.';
     case 'auth/too-many-requests': return 'Too many attempts. Please wait a moment and try again.';
     case 'auth/network-request-failed': return 'Check your internet connection and try again.';
+    case 'permission-denied':
+    case 'firestore/permission-denied': return 'The profile could not be saved because Firestore access was denied. Ask an administrator to deploy the latest Firestore rules, then try again.';
     default: return 'We could not complete that request. Please try again.';
   }
 }
