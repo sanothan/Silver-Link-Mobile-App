@@ -1,4 +1,4 @@
-import { Link, useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthShell, authStyles } from '../components/AuthShell';
@@ -9,7 +9,6 @@ import { colors } from '../theme/colors';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
@@ -21,7 +20,7 @@ export default function Login() {
 
   async function handleSignIn() {
     setError(''); setNotice(''); setSubmitting(true);
-    try { await loginUser(email, password); router.replace('/home'); }
+    try { await loginUser(email, password); }
     catch (err) { setError(err instanceof Error ? err.message : 'Please try again.'); }
     finally { setSubmitting(false); }
   }
