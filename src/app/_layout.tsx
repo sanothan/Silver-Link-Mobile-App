@@ -8,7 +8,7 @@ import { colors } from '../theme/colors';
 const PUBLIC_ROUTES = new Set(['index', 'welcome', 'login', 'register']);
 
 function RootNavigator() {
-  const { user, initializing } = useAuth();
+  const { user, profile, initializing } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
@@ -16,13 +16,16 @@ function RootNavigator() {
     if (initializing) return;
     const currentRoute = segments[segments.length - 1] ?? 'index';
     const inPublicRoute = PUBLIC_ROUTES.has(currentRoute);
+    const inElderlyRoutes = (segments as readonly string[]).includes('(elderly)');
 
-    if (!user && currentRoute === 'home') {
+    if (!user && (currentRoute === 'home' || inElderlyRoutes)) {
       router.replace('/login');
     } else if (user && inPublicRoute) {
+      router.replace(profile?.role === 'elderly' ? '/(elderly)' : '/home');
+    } else if (user && profile?.role !== 'elderly' && inElderlyRoutes) {
       router.replace('/home');
     }
-  }, [user, initializing, segments, router]);
+  }, [user, profile, initializing, segments, router]);
 
   if (initializing) {
     return (
@@ -39,6 +42,7 @@ function RootNavigator() {
       <Stack.Screen name="login" />
       <Stack.Screen name="register" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="home" />
+      <Stack.Screen name="(elderly)" />
     </Stack>
   );
 }

@@ -1,8 +1,9 @@
 import { createUserWithEmailAndPassword, deleteUser, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
+import type { UserRole } from '../types/user';
 
-export type UserRole = 'elderly' | 'volunteer' | 'caregiver';
+export type { UserRole } from '../types/user';
 export type RegisterInput = { fullName: string; email: string; password: string; role: UserRole };
 
 function requireFirebase() {

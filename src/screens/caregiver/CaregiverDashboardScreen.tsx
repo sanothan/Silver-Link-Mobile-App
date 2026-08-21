@@ -46,12 +46,12 @@ type UpcomingVisit = {
   visitStatus: VisitStatus;
 };
 
-const NAV_ITEMS: Array<{
+const NAV_ITEMS: {
   id: string;
   label: string;
   icon: string;
   active?: boolean;
-}> = [
+}[] = [
   { id: "home", label: "Home", icon: "⌂", active: true },
   { id: "visits", label: "Visits", icon: "🗓" },
   { id: "messages", label: "Messages", icon: "💬" },
@@ -224,7 +224,7 @@ export default function CaregiverDashboardScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>
-            We couldn't load your dashboard information.
+            We couldn&apos;t load your dashboard information.
           </Text>
           <Text style={styles.errorText}>Please try again.</Text>
           <Pressable
