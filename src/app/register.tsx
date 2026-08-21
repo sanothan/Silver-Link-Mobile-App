@@ -1,4 +1,4 @@
-import { Link, useRouter } from 'expo-router';
+import { Link, type Href, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthShell, authStyles } from '../components/AuthShell';
@@ -31,7 +31,7 @@ export default function Register() {
     setError('');
     if (!canSubmit) { setError('Check each field and use a password with at least 8 characters.'); return; }
     setSubmitting(true);
-    try { await registerUser({ fullName, email, password, role }); router.replace(role === 'elderly' ? '/(elderly)' : '/home'); }
+    try { await registerUser({ fullName, email, password, role }); router.replace((role === 'elderly' ? '/(elderly)' : role === 'volunteer' ? '/(volunteer)' : '/home') as Href); }
     catch (err) { setError(err instanceof Error ? err.message : 'Please try again.'); }
     finally { setSubmitting(false); }
   }
