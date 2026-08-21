@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
+import { logoutUser } from "../../services/authService";
 import { colors } from "../../theme/colors";
 
 type VisitStatus =
@@ -257,10 +258,11 @@ export default function CaregiverDashboardScreen() {
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Notifications"
+              accessibilityLabel="Log out"
               style={styles.notificationButton}
+              onPress={logoutUser}
             >
-              <Text style={styles.notificationIcon}>🔔</Text>
+              <Text style={styles.logoutText}>Exit</Text>
             </Pressable>
           </View>
 
@@ -531,6 +533,7 @@ const styles = StyleSheet.create({
   notificationIcon: {
     fontSize: 20,
   },
+  logoutText: { color: colors.primary, fontSize: 14, fontWeight: "800" },
   sectionWrap: {
     marginBottom: 20,
   },

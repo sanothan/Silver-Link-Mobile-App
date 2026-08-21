@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,9 +40,9 @@ export default function VolunteerDashboardScreen() {
     setState('loading');
     try { setData(await getVolunteerDashboard(user.uid, profile?.status)); setState('ready'); }
     catch { setState('error'); }
-  }, [profile?.status, user]);
+  }, [profile, user]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
-  const navigate = (route: '/(volunteer)/explore' | '/(volunteer)/activities' | '/(volunteer)/alerts' | '/(volunteer)/profile') => router.push(route);
+  const navigate = (route: '/(volunteer)/explore' | '/(volunteer)/activities' | '/(volunteer)/alerts' | '/(volunteer)/profile') => router.push(route as Href);
 
   if (state === 'loading') return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /><Text style={styles.centerText}>Loading your dashboard…</Text></View></SafeAreaView>;
   if (state === 'error') return <SafeAreaView style={styles.safe}><View style={styles.center}><Text style={styles.errorHeading}>We couldn’t load your dashboard.</Text><Text style={styles.centerText}>Please try again.</Text><Pressable accessibilityRole="button" style={styles.retryButton} onPress={() => void load()}><Text style={styles.retryText}>Try Again</Text></Pressable></View></SafeAreaView>;

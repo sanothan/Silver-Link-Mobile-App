@@ -21,12 +21,18 @@ service cloud.firestore {
       return isSignedIn() ? callerProfile().role : null;
     }
 
+    function hasPlatformAccess() {
+      return isSignedIn() &&
+        (callerProfile().status == 'active' ||
+          (callerProfile().role == 'volunteer' && callerProfile().status == 'pending'));
+    }
+
     function isAdmin() {
       return isSignedIn() && callerRole() == 'admin';
     }
 
     function isRole(role) {
-      return isSignedIn() && callerRole() == role;
+      return hasPlatformAccess() && callerRole() == role;
     }
 
     function isLinkedCaregiver(elderlyUid) {
@@ -37,9 +43,9 @@ service cloud.firestore {
 
     // Only elderly/volunteer/caregiver may self-register; admin is console-only
     // (set manually in the Firebase console, never through a client write).
-    function isSelfRegistration() {
+    function isSelfRegistration(uid) {
       return isOwner(request.resource.data.uid) &&
-        request.auth.uid == request.resource.id &&
+        request.auth.uid == uid &&
         request.resource.data.role in ['elderly', 'volunteer', 'caregiver'] &&
         request.resource.data.status in ['active', 'pending'];
     }
@@ -47,7 +53,7 @@ service cloud.firestore {
     // ---- users/{uid} ----
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin() || isLinkedCaregiver(uid);
-      allow create: if isSelfRegistration();
+      allow create: if isSelfRegistration(uid);
       // Owners may update their own profile but never their own role/status
       // (that would be self-granted privilege escalation / unverifying
       // themselves); admins may change anything.
@@ -61,25 +67,25 @@ service cloud.firestore {
 
     // ---- volunteer/{uid}-keyed collections ----
     match /volunteerProfiles/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow write: if isOwner(uid) || isAdmin();
+      allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+      allow write: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
     }
 
     match /volunteerStats/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
+      allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
       // Stats should only ever be computed/adjusted by an admin, not the
       // volunteer themselves.
       allow write: if isAdmin();
     }
 
     match /volunteerAvailability/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow write: if isOwner(uid) || isAdmin();
+      allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+      allow write: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
     }
 
     // ---- companionship requests ----
     match /requests/{requestId} {
-      allow read: if isSignedIn();
+      allow read: if hasPlatformAccess();
       allow create: if (isRole('elderly') || isRole('caregiver')) &&
         request.resource.data.createdBy == request.auth.uid;
       // Volunteers may update status (e.g. accept an open request) but only
@@ -101,7 +107,7 @@ service cloud.firestore {
     // ---- notifications ----
     match /notifications/{notificationId} {
       allow read: if isAdmin() || resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn();
+      allow create: if hasPlatformAccess() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || resource.data.userId == request.auth.uid;
     }
 

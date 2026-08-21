@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -11,6 +12,8 @@ const slides = [
   { icon: '⌚', title: 'Volunteer your way', description: 'Choose activities that fit your time, interests, and location.', color: '#E0F2FE', iconColor: colors.info },
   { icon: '⌂', title: 'Peace of mind', description: 'Caregivers can follow scheduled visits and receive important updates.', color: '#DCFCE7', iconColor: colors.success },
 ] as const;
+
+const ONBOARDING_COMPLETE_KEY = 'silverlink.onboarding.complete.v1';
 
 function Splash() {
   const [opacity] = useState(() => new Animated.Value(0));
@@ -61,11 +64,22 @@ export default function Index() {
   const [destination, setDestination] = useState<'loading' | 'onboarding'>('loading');
 
   useEffect(() => {
-    const timer = setTimeout(() => setDestination('onboarding'), 3000);
-    return () => clearTimeout(timer);
-  }, []);
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const completed = await AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY);
+        if (!active) return;
+        if (completed === 'true') router.replace('/welcome');
+        else setDestination('onboarding');
+      } catch {
+        if (active) setDestination('onboarding');
+      }
+    }, 3000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [router]);
 
-  function finishOnboarding() {
+  async function finishOnboarding() {
+    await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true').catch(() => undefined);
     router.replace('/welcome');
   }
 

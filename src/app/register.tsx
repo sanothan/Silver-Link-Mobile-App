@@ -1,8 +1,9 @@
-import { Link, type Href, useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthShell, authStyles } from '../components/AuthShell';
 import { Brand } from '../components/Brand';
+import { useAuth } from '../context/AuthContext';
 import { registerUser, type UserRole } from '../services/authService';
 import { colors } from '../theme/colors';
 
@@ -14,7 +15,7 @@ const roles: { value: UserRole; label: string }[] = [
 ];
 
 export default function Register() {
-  const router = useRouter();
+  const { retryProfile } = useAuth();
   const [role, setRole] = useState<UserRole>('elderly');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -31,7 +32,10 @@ export default function Register() {
     setError('');
     if (!canSubmit) { setError('Check each field and use a password with at least 8 characters.'); return; }
     setSubmitting(true);
-    try { await registerUser({ fullName, email, password, role }); router.replace((role === 'elderly' ? '/(elderly)' : role === 'volunteer' ? '/(volunteer)' : '/home') as Href); }
+    try {
+      const createdUser = await registerUser({ fullName, email, password, role });
+      await retryProfile(createdUser.uid);
+    }
     catch (err) { setError(err instanceof Error ? err.message : 'Please try again.'); }
     finally { setSubmitting(false); }
   }
