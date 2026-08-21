@@ -1,0 +1,113 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // NOTE: costs an extra read per rule evaluation, but it's the only way to
+    // check a caller's role without trusting client-supplied data.
+    function callerProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function callerRole() {
+      return isSignedIn() ? callerProfile().role : null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && callerRole() == 'admin';
+    }
+
+    function isRole(role) {
+      return isSignedIn() && callerRole() == role;
+    }
+
+    function isLinkedCaregiver(elderlyUid) {
+      return isRole('caregiver') &&
+        exists(/databases/$(database)/documents/users/$(elderlyUid)) &&
+        get(/databases/$(database)/documents/users/$(elderlyUid)).data.caregiverId == request.auth.uid;
+    }
+
+    // Only elderly/volunteer/caregiver may self-register; admin is console-only
+    // (set manually in the Firebase console, never through a client write).
+    function isSelfRegistration() {
+      return isOwner(request.resource.data.uid) &&
+        request.auth.uid == request.resource.id &&
+        request.resource.data.role in ['elderly', 'volunteer', 'caregiver'] &&
+        request.resource.data.status in ['active', 'pending'];
+    }
+
+    // ---- users/{uid} ----
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin() || isLinkedCaregiver(uid);
+      allow create: if isSelfRegistration();
+      // Owners may update their own profile but never their own role/status
+      // (that would be self-granted privilege escalation / unverifying
+      // themselves); admins may change anything.
+      allow update: if isAdmin() ||
+        (isOwner(uid) &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.uid == resource.data.uid);
+      allow delete: if isAdmin();
+    }
+
+    // ---- volunteer/{uid}-keyed collections ----
+    match /volunteerProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) || isAdmin();
+    }
+
+    match /volunteerStats/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      // Stats should only ever be computed/adjusted by an admin, not the
+      // volunteer themselves.
+      allow write: if isAdmin();
+    }
+
+    match /volunteerAvailability/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) || isAdmin();
+    }
+
+    // ---- companionship requests ----
+    match /requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if (isRole('elderly') || isRole('caregiver')) &&
+        request.resource.data.createdBy == request.auth.uid;
+      // Volunteers may update status (e.g. accept an open request) but only
+      // the creator or an admin may delete a request.
+      allow update: if isAdmin() || resource.data.createdBy == request.auth.uid || isRole('volunteer');
+      allow delete: if isAdmin() || resource.data.createdBy == request.auth.uid;
+    }
+
+    match /requestAssignments/{assignmentId} {
+      allow read: if isAdmin() ||
+        resource.data.volunteerId == request.auth.uid ||
+        (isSignedIn() &&
+          exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
+          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid);
+      allow create: if isRole('volunteer') && request.resource.data.volunteerId == request.auth.uid;
+      allow update, delete: if isAdmin() || resource.data.volunteerId == request.auth.uid;
+    }
+
+    // ---- notifications ----
+    match /notifications/{notificationId} {
+      allow read: if isAdmin() || resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || resource.data.userId == request.auth.uid;
+    }
+
+    // Deny anything not explicitly matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
