@@ -63,9 +63,9 @@ function RootNavigator() {
       <Stack.Screen name="register" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="account-status" />
       <Stack.Screen name="home" />
-      <Stack.Screen name="admin" />
       <Stack.Screen name="(elderly)" />
       <Stack.Screen name="(volunteer)" />
+      <Stack.Screen name="(admin)" />
     </Stack>
   );
 }

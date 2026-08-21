@@ -1,2 +1,5 @@
-import { VolunteerPlaceholderScreen } from '../../components/VolunteerPlaceholderScreen';
-export default function Alerts() { return <VolunteerPlaceholderScreen title="Alerts & Safety" message="Activity updates, safety guidance, and support options will appear here." />; }
+import type { Href } from 'expo-router';
+import { ReportIssueScreen } from '../../components/ReportIssueScreen';
+export default function Alerts() {
+  return <ReportIssueScreen title="Alerts & Safety" message="Report a concern or safety issue to SilverLink support." homeHref={'/(volunteer)' as Href} />;
+}

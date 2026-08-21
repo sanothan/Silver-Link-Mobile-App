@@ -5,14 +5,14 @@ export const ROLE_HOME: Record<UserRole, Href> = {
   elderly: '/(elderly)' as Href,
   volunteer: '/(volunteer)' as Href,
   caregiver: '/home' as Href,
-  admin: '/admin' as Href,
+  admin: '/(admin)' as Href,
 };
 
 export const ROLE_ROUTE_SEGMENT: Record<UserRole, string> = {
   elderly: '(elderly)',
   volunteer: '(volunteer)',
   caregiver: 'home',
-  admin: 'admin',
+  admin: '(admin)',
 };
 
 export function canEnterDashboard(profile: UserProfile) {
