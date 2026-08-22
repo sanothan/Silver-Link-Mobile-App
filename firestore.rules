@@ -81,6 +81,18 @@ service cloud.firestore {
     match /volunteerAvailability/{uid} {
       allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
       allow write: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+
+      match /entries/{availabilityId} {
+        allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+        allow create: if (isOwner(uid) && hasPlatformAccess()) &&
+          request.resource.data.volunteerId == request.auth.uid;
+        allow update: if isAdmin() ||
+          (isOwner(uid) && hasPlatformAccess() &&
+            resource.data.volunteerId == request.auth.uid &&
+            request.resource.data.volunteerId == resource.data.volunteerId);
+        allow delete: if isAdmin() ||
+          (isOwner(uid) && hasPlatformAccess() && resource.data.volunteerId == request.auth.uid);
+      }
     }
 
     // ---- companionship requests ----
