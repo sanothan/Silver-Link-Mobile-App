@@ -11,6 +11,8 @@ export default function ElderlyTabLayout() {
     <Tabs.Screen name="visits" options={{ title: 'Visits', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.visits}</Text> }} />
     <Tabs.Screen name="alerts" options={{ title: 'Alerts', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.alerts}</Text> }} />
     <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.profile}</Text> }} />
+    <Tabs.Screen name="request-details/[id]" options={{ href: null }} />
+    <Tabs.Screen name="edit-request/[id]" options={{ href: null }} />
   </Tabs>;
 }
 
