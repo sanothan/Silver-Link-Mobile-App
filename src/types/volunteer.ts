@@ -15,9 +15,24 @@ export interface VolunteerActivity extends VolunteerOpportunity {
   status: VolunteerActivityStatus;
 }
 
+export const VOLUNTEER_ACTIVITY_TYPES = ['Friendly Conversation', 'Walking Companionship', 'Smartphone Help', 'Grocery Collection', 'Medicine Collection', 'Online Service Help', 'Community / Appointment Support'] as const;
+export const VOLUNTEER_DURATION_PREFERENCES = ['30 minutes', '30–60 minutes', '1–2 hours', 'More than 2 hours', 'Flexible'] as const;
+
 export interface VolunteerAvailability {
-  label: string;
+  id: string;
+  volunteerId: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  isAvailable: boolean;
+  preferredActivityTypes?: string[];
+  preferredDuration?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
+
+export type CreateAvailabilityData = Pick<VolunteerAvailability, 'date' | 'startTime' | 'endTime' | 'preferredActivityTypes' | 'preferredDuration'>;
+export type UpdateAvailabilityData = CreateAvailabilityData;
 
 export interface VolunteerImpact {
   completedActivities?: number;
