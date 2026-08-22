@@ -1,7 +1,7 @@
-import { collection, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { collection, getDocs, doc, query, updateDoc, where } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { getOpenReports } from './reportService';
-import type { ActionItem, AdminDashboardData, AdminDashboardStats, PendingVolunteer } from '../types/admin';
+import type { ActionItem, AdminDashboardData, AdminDashboardStats, AdminUserRow, PendingVolunteer } from '../types/admin';
 
 const ACTIVE_ASSIGNMENT_STATUSES = ['accepted', 'scheduled', 'ready_to_start', 'in_progress'];
 const OPEN_REQUEST_STATUSES = ['pending', 'open', 'available'];
@@ -72,4 +72,19 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
 export async function approveVolunteer(uid: string): Promise<void> {
   if (!db) throw new Error('Firebase is not configured.');
   await updateDoc(doc(db, 'users', uid), { status: 'active' });
+}
+
+export async function listUsers(): Promise<AdminUserRow[]> {
+  if (!db) throw new Error('Firebase is not configured.');
+  const snapshot = await getDocs(collection(db, 'users'));
+  return snapshot.docs.map((item) => {
+    const data = item.data();
+    return {
+      uid: item.id,
+      fullName: asText(data.fullName) || 'Unnamed user',
+      email: asText(data.email),
+      role: asText(data.role) || 'unknown',
+      status: asText(data.status) || 'unknown',
+    };
+  }).sort((a, b) => a.fullName.localeCompare(b.fullName));
 }

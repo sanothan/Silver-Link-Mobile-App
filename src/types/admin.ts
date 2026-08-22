@@ -30,3 +30,11 @@ export interface AdminDashboardData {
   pendingVolunteers: PendingVolunteer[];
   actionItems: ActionItem[];
 }
+
+export interface AdminUserRow {
+  uid: string;
+  fullName: string;
+  email: string;
+  role: string;
+  status: string;
+}
