@@ -1,33 +1,35 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../services/firebaseConfig';
+import { listUsers } from '../../services/adminDashboardService';
 import { colors } from '../../theme/colors';
+import type { AdminUserRow } from '../../types/admin';
 
 type LoadState = 'loading' | 'ready' | 'error';
 type RoleCounts = { elderly: number; volunteer: number; caregiver: number; admin: number; suspended: number };
 
 const EMPTY_COUNTS: RoleCounts = { elderly: 0, volunteer: 0, caregiver: 0, admin: 0, suspended: 0 };
 
+function countByRole(users: AdminUserRow[]): RoleCounts {
+  const next: RoleCounts = { ...EMPTY_COUNTS };
+  users.forEach((user) => {
+    if (user.role === 'elderly' || user.role === 'volunteer' || user.role === 'caregiver' || user.role === 'admin') next[user.role] += 1;
+    if (user.status === 'suspended') next.suspended += 1;
+  });
+  return next;
+}
+
 export default function AdminUsersScreen() {
   const [state, setState] = useState<LoadState>('loading');
-  const [counts, setCounts] = useState<RoleCounts>(EMPTY_COUNTS);
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
-    if (!db) { setState('error'); return; }
     setState('loading');
     try {
-      const snapshot = await getDocs(collection(db, 'users'));
-      const next: RoleCounts = { ...EMPTY_COUNTS };
-      snapshot.docs.forEach((item) => {
-        const data = item.data();
-        const role = typeof data.role === 'string' ? data.role : '';
-        if (role === 'elderly' || role === 'volunteer' || role === 'caregiver' || role === 'admin') next[role] += 1;
-        if (data.status === 'suspended') next.suspended += 1;
-      });
-      setCounts(next);
+      const next = await listUsers();
+      setUsers(next);
       setState('ready');
     } catch {
       setState('error');
@@ -35,6 +37,18 @@ export default function AdminUsersScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+
+  const counts = useMemo(() => countByRole(users), [users]);
+
+  const filteredUsers = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return users;
+    return users.filter((user) =>
+      user.fullName.toLowerCase().includes(trimmed) ||
+      user.email.toLowerCase().includes(trimmed) ||
+      user.role.toLowerCase().includes(trimmed)
+    );
+  }, [users, query]);
 
   if (state === 'loading') {
     return (
@@ -51,7 +65,7 @@ export default function AdminUsersScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.centerHeading}>We couldn't load the admin dashboard.</Text>
+          <Text style={styles.centerHeading}>We couldn&apos;t load the admin dashboard.</Text>
           <Text style={styles.centerText}>Please try again.</Text>
           <Pressable accessibilityRole="button" style={styles.retryButton} onPress={() => void load()}>
             <Text style={styles.retryText}>Try Again</Text>
@@ -75,10 +89,39 @@ export default function AdminUsersScreen() {
           <View style={[styles.row, styles.rowLast]}><Text style={styles.rowLabel}>Suspended</Text><Text style={[styles.rowValue, counts.suspended > 0 && styles.rowValueWarning]}>{counts.suspended}</Text></View>
         </View>
 
-        <View style={styles.noticeCard}>
-          <Text style={styles.noticeTitle}>Coming soon</Text>
-          <Text style={styles.noticeBody}>Search, role filters, and account actions (warn, suspend, block) will be available here.</Text>
-        </View>
+        <Text style={styles.sectionTitle}>All Users</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name, email, or role"
+          placeholderTextColor={colors.inputPlaceholder}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Search users"
+        />
+
+        {filteredUsers.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No users found</Text>
+            <Text style={styles.emptyBody}>Try a different search term.</Text>
+          </View>
+        ) : (
+          <View style={styles.userCards}>
+            {filteredUsers.map((user) => (
+              <View key={user.uid} style={styles.userCard}>
+                <View style={styles.cardTop}>
+                  <Text style={styles.cardTitle}>{user.fullName}</Text>
+                  <View style={[styles.statusBadge, user.status === 'suspended' && styles.statusBadgeError, user.status === 'active' && styles.statusBadgeSuccess]}>
+                    <Text style={styles.statusBadgeText}>{user.status}</Text>
+                  </View>
+                </View>
+                {user.email ? <Text style={styles.cardDetail}>{user.email}</Text> : null}
+                <Text style={styles.cardRole}>{user.role}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -100,7 +143,19 @@ const styles = StyleSheet.create({
   rowLabel: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
   rowValue: { color: colors.primary, fontSize: 16, fontWeight: '800' },
   rowValueWarning: { color: colors.error },
-  noticeCard: { backgroundColor: colors.surfaceSoft, borderRadius: 16, padding: 16, marginTop: 16 },
-  noticeTitle: { color: colors.textPrimary, fontSize: 14, fontWeight: '800' },
-  noticeBody: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 4 },
+  sectionTitle: { fontSize: 18, lineHeight: 24, fontWeight: '800', color: colors.textPrimary, marginTop: 24, marginBottom: 12 },
+  searchInput: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.inputBorder, backgroundColor: colors.inputBackground, paddingHorizontal: 14, fontSize: 15, color: colors.textPrimary, marginBottom: 14 },
+  userCards: { gap: 10 },
+  userCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 15 },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  cardTitle: { flex: 1, color: colors.textPrimary, fontSize: 16, lineHeight: 22, fontWeight: '800' },
+  cardDetail: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 4 },
+  cardRole: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 6, textTransform: 'capitalize' },
+  statusBadge: { backgroundColor: colors.surfaceSoft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  statusBadgeSuccess: { backgroundColor: colors.successLight },
+  statusBadgeError: { backgroundColor: colors.errorLight },
+  statusBadgeText: { color: colors.textPrimary, fontSize: 12, fontWeight: '800', textTransform: 'capitalize' },
+  emptyCard: { backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 20, alignItems: 'center' },
+  emptyTitle: { color: colors.textPrimary, fontSize: 17, fontWeight: '800' },
+  emptyBody: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 6, textAlign: 'center' },
 });
