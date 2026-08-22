@@ -1,5 +1,6 @@
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from './firebaseConfig';
+import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { updateProfile } from 'firebase/auth';
+import { auth, db } from './firebaseConfig';
 import type { UserProfile } from '../types/user';
 
 export type ProfileIssue = 'missing-profile' | 'invalid-role' | 'invalid-status' | 'load-failed';
@@ -34,5 +35,17 @@ export async function getUserProfile(uid: string): Promise<UserProfile> {
     role: data.role,
     status: data.status,
     caregiverId: typeof data.caregiverId === 'string' ? data.caregiverId : undefined,
+    phone: typeof data.phone === 'string' ? data.phone : undefined,
+    locality: typeof data.locality === 'string' ? data.locality : undefined,
+    preferredLanguage: typeof data.preferredLanguage === 'string' ? data.preferredLanguage : undefined,
+    photoUrl: typeof data.photoUrl === 'string' ? data.photoUrl : undefined,
   };
+}
+
+export type UserManagedProfile = { fullName: string; phone?: string; locality?: string; preferredLanguage?: string };
+export async function updateUserProfile(uid: string, values: UserManagedProfile) {
+  if (!db || !auth?.currentUser || auth.currentUser.uid !== uid) throw new Error('You are not signed in.');
+  const clean = { fullName: values.fullName.trim(), phone: values.phone?.trim() || null, locality: values.locality?.trim() || null, preferredLanguage: values.preferredLanguage?.trim() || null, updatedAt: serverTimestamp() };
+  await updateDoc(doc(db, 'users', uid), clean);
+  await updateProfile(auth.currentUser, { displayName: clean.fullName });
 }

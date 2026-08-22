@@ -85,13 +85,28 @@ service cloud.firestore {
 
     // ---- companionship requests ----
     match /requests/{requestId} {
-      allow read: if hasPlatformAccess();
-      allow create: if (isRole('elderly') || isRole('caregiver')) &&
-        request.resource.data.createdBy == request.auth.uid;
-      // Volunteers may update status (e.g. accept an open request) but only
-      // the creator or an admin may delete a request.
-      allow update: if isAdmin() || resource.data.createdBy == request.auth.uid || isRole('volunteer');
-      allow delete: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow read: if isAdmin() ||
+        (hasPlatformAccess() && resource.data.createdBy == request.auth.uid) ||
+        isRole('volunteer') || isRole('caregiver');
+      allow create: if isRole('elderly') &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.keys().hasAll(['createdBy', 'activityType', 'preferredDate', 'preferredTime', 'location', 'status']);
+      // Elderly owners can edit only user-managed fields while pending or
+      // accepted, or cancel a pending/accepted/scheduled request.
+      allow update: if isAdmin() ||
+        (isRole('elderly') && resource.data.createdBy == request.auth.uid &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          ((resource.data.status in ['pending', 'accepted'] &&
+            request.resource.data.status == resource.data.status &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activityType', 'description', 'preferredDate', 'preferredTime', 'durationMinutes', 'durationLabel', 'location', 'updatedAt'])) ||
+           (resource.data.status in ['pending', 'accepted', 'scheduled'] &&
+            request.resource.data.status == 'cancelled' &&
+            request.resource.data.cancelledBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledBy', 'updatedAt'])))) ||
+        (isRole('volunteer') && request.resource.data.createdBy == resource.data.createdBy);
+      // Preserve workflow history; only admins may hard-delete requests.
+      allow delete: if isAdmin();
     }
 
     match /requestAssignments/{assignmentId} {
