@@ -2,13 +2,14 @@ import { Tabs } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 import { colors } from '../../theme/colors';
 
-const icons = { index: '⌂', request: '+', visits: '▣', alerts: '!', profile: '○' } as const;
+const icons = { index: '⌂', request: '+', visits: '▣', notifications: '✉', alerts: '!', profile: '○' } as const;
 
 export default function ElderlyTabLayout() {
   return <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textSecondary, tabBarLabelStyle: styles.label, tabBarStyle: styles.bar, tabBarItemStyle: styles.item }}>
     <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.index}</Text> }} />
     <Tabs.Screen name="request" options={{ title: 'Request', tabBarIcon: ({ color }) => <Text style={[styles.requestIcon, { backgroundColor: color }]}>+</Text> }} />
     <Tabs.Screen name="visits" options={{ title: 'Visits', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.visits}</Text> }} />
+    <Tabs.Screen name="notifications" options={{ title: 'Updates', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.notifications}</Text> }} />
     <Tabs.Screen name="alerts" options={{ title: 'Alerts', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.alerts}</Text> }} />
     <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.profile}</Text> }} />
     <Tabs.Screen name="request-details/[id]" options={{ href: null }} />

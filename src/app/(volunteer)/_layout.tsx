@@ -11,6 +11,8 @@ export default function VolunteerTabLayout() {
     <Tabs.Screen name="activities" options={{ title: 'Activities', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.activities}</Text> }} />
     <Tabs.Screen name="alerts" options={{ title: 'Alerts', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.alerts}</Text> }} />
     <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.profile}</Text> }} />
+    <Tabs.Screen name="availability" options={{ href: null }} />
+    <Tabs.Screen name="request-details/[id]" options={{ href: null }} />
   </Tabs>;
 }
 
