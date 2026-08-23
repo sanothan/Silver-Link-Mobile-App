@@ -55,7 +55,7 @@ export default function AdminReportsScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.centerHeading}>We couldn't load the admin dashboard.</Text>
+          <Text style={styles.centerHeading}>We couldn&apos;t load the admin dashboard.</Text>
           <Text style={styles.centerText}>Please try again.</Text>
           <Pressable accessibilityRole="button" style={styles.retryButton} onPress={() => void load()}>
             <Text style={styles.retryText}>Try Again</Text>

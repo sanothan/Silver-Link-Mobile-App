@@ -1,7 +1,7 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, type DocumentData, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { getVolunteerAvailability } from './volunteerAvailabilityService';
-import type { VolunteerActivity, VolunteerActivityStatus, VolunteerAvailability, VolunteerDashboardData, VolunteerImpact, VolunteerOpportunity, VolunteerUpdate, VolunteerVerificationStatus } from '../types/volunteer';
+import type { VolunteerActivity, VolunteerActivityStatus, VolunteerDashboardData, VolunteerImpact, VolunteerOpportunity, VolunteerUpdate, VolunteerVerificationStatus } from '../types/volunteer';
 
 const OPEN_REQUEST_STATUSES = ['pending', 'open', 'available'];
 const ACTIVE_ACTIVITY_STATUSES: VolunteerActivityStatus[] = ['accepted', 'scheduled', 'ready_to_start', 'in_progress'];
