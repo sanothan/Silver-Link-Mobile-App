@@ -41,6 +41,24 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(elderlyUid)).data.caregiverId == request.auth.uid;
     }
 
+    // A volunteer may only claim a request that is *stored* as pending and
+    // unassigned, and only by stamping their own uid onto it. Two volunteers
+    // racing for the same request both send this write; the first commit flips
+    // the stored status to 'accepted', so the second no longer satisfies the
+    // rule and is rejected by the database itself. Nothing here depends on the
+    // client having disabled a button or run the acceptance transaction.
+    function isVolunteerAcceptance() {
+      return isRole('volunteer') &&
+        resource.data.status == 'pending' &&
+        resource.data.get('assignedVolunteerId', null) == null &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.assignedVolunteerId == request.auth.uid &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        resource.data.createdBy != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified', 'acceptedAt', 'updatedAt']);
+    }
+
     // Only elderly/volunteer/caregiver may self-register; admin is console-only
     // (set manually in the Firebase console, never through a client write).
     function isSelfRegistration(uid) {
@@ -120,7 +138,7 @@ service cloud.firestore {
             request.resource.data.status == 'cancelled' &&
             request.resource.data.cancelledBy == request.auth.uid &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledBy', 'updatedAt'])))) ||
-        (isRole('volunteer') && request.resource.data.createdBy == resource.data.createdBy);
+        isVolunteerAcceptance();
       // Preserve workflow history; only admins may hard-delete requests.
       allow delete: if isAdmin();
     }
@@ -131,8 +149,26 @@ service cloud.firestore {
         (isSignedIn() &&
           exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
           get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid);
-      allow create: if isRole('volunteer') && request.resource.data.volunteerId == request.auth.uid;
-      allow update, delete: if isAdmin() || resource.data.volunteerId == request.auth.uid;
+      // The assignment id must be the request id, so a request can hold at most
+      // one assignment document. `create` only ever succeeds on a document that
+      // does not exist yet, which makes "one volunteer per request" a database
+      // constraint rather than a check the client could skip. A second
+      // volunteer's write lands as an update and is refused below, because the
+      // stored volunteerId is not theirs.
+      allow create: if isRole('volunteer') &&
+        request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.requestId == assignmentId;
+      allow update, delete: if isAdmin() ||
+        resource.data.volunteerId == request.auth.uid ||
+        // The elderly owner cancelling their request must be able to mark the
+        // matching assignment cancelled too, so a volunteer's or admin's
+        // dashboard stops showing it as an active activity. Limited to
+        // flipping status to 'cancelled' only.
+        (isRole('elderly') &&
+          exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
+          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid &&
+          request.resource.data.status == 'cancelled' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
     }
 
     // ---- notifications ----
