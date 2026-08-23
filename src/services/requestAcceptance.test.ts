@@ -1,4 +1,4 @@
-import { acceptRequest, cancelRequest, getOpenRequests, getRequestForVolunteer, getVolunteerRequests, RequestAcceptanceError } from './requestService';
+import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getVolunteerRequests, RequestAcceptanceError } from './requestService';
 import { createAcceptanceNotifications } from './notificationService';
 import { getUserProfile } from './userService';
 import type { UserProfile } from '../types/user';
@@ -277,6 +277,27 @@ describe('cancelRequest — keeps the assignment record in step', () => {
     seedRequest('r1');
     await cancelRequest('r1', 'elderly-1');
     expect(firestore.__store.has('requestAssignments/r1')).toBe(false);
+  });
+});
+
+describe('confirmAssignedVolunteer — elderly approval', () => {
+  it('moves an accepted request and assignment to scheduled', async () => {
+    seedRequest('r1');
+    await acceptRequest('r1', 'vol-a');
+    await confirmAssignedVolunteer('r1', 'elderly-1');
+    expect(requestData('r1')?.status).toBe('scheduled');
+    expect(assignmentData('r1')?.status).toBe('scheduled');
+  });
+
+  it('rejects confirmation by someone other than the request owner', async () => {
+    seedRequest('r1');
+    await acceptRequest('r1', 'vol-a');
+    await expect(confirmAssignedVolunteer('r1', 'caregiver-1')).rejects.toThrow('You cannot access this request.');
+  });
+
+  it('rejects confirmation before a volunteer accepts', async () => {
+    seedRequest('r1');
+    await expect(confirmAssignedVolunteer('r1', 'elderly-1')).rejects.toThrow('This volunteer can no longer be confirmed.');
   });
 });
 

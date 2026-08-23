@@ -12,15 +12,21 @@ export interface CompanionshipRequest {
   durationMinutes?: number;
   durationLabel?: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
   status: RequestStatus;
   assignedVolunteerId?: string;
   volunteerName?: string;
   volunteerVerified?: boolean;
+  volunteerPhotoUrl?: string;
+  volunteerBio?: string;
+  volunteerExperience?: string;
+  volunteerRating?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export type RequestFormValues = Pick<CompanionshipRequest, 'activityType' | 'description' | 'preferredDate' | 'preferredTime' | 'durationMinutes' | 'durationLabel' | 'location'>;
+export type RequestFormValues = Pick<CompanionshipRequest, 'activityType' | 'description' | 'preferredDate' | 'preferredTime' | 'durationMinutes' | 'durationLabel' | 'location' | 'latitude' | 'longitude'>;
 
 export const EDITABLE_REQUEST_STATUSES: RequestStatus[] = ['pending', 'accepted'];
 export const CANCELLABLE_REQUEST_STATUSES: RequestStatus[] = ['pending', 'accepted', 'scheduled'];
