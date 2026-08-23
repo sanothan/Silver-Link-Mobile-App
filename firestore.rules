@@ -144,11 +144,18 @@ service cloud.firestore {
     }
 
     match /requestAssignments/{assignmentId} {
+      // Guarded with exists() first: a volunteer's acceptance transaction
+      // reads this doc to check whether the request is already claimed, and
+      // on the first-ever acceptance it doesn't exist yet. Dereferencing
+      // resource.data on a nonexistent document throws inside the rule
+      // engine, which Firestore surfaces as "Missing or insufficient
+      // permissions" instead of a clean "not found".
       allow read: if isAdmin() ||
-        resource.data.volunteerId == request.auth.uid ||
-        (isSignedIn() &&
-          exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
-          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid);
+        (exists(/databases/$(database)/documents/requestAssignments/$(assignmentId)) &&
+          (resource.data.volunteerId == request.auth.uid ||
+            (isSignedIn() &&
+              exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
+              get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid)));
       // The assignment id must be the request id, so a request can hold at most
       // one assignment document. `create` only ever succeeds on a document that
       // does not exist yet, which makes "one volunteer per request" a database
