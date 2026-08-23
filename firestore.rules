@@ -56,7 +56,7 @@ service cloud.firestore {
         request.resource.data.createdBy == resource.data.createdBy &&
         resource.data.createdBy != request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified', 'acceptedAt', 'updatedAt']);
+          .hasOnly(['status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified', 'volunteerPhotoUrl', 'volunteerBio', 'volunteerExperience', 'volunteerRating', 'acceptedAt', 'updatedAt']);
     }
 
     // Only elderly/volunteer/caregiver may self-register; admin is console-only
@@ -133,7 +133,11 @@ service cloud.firestore {
           request.resource.data.createdBy == resource.data.createdBy &&
           ((resource.data.status in ['pending', 'accepted'] &&
             request.resource.data.status == resource.data.status &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activityType', 'description', 'preferredDate', 'preferredTime', 'durationMinutes', 'durationLabel', 'location', 'updatedAt'])) ||
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activityType', 'description', 'preferredDate', 'preferredTime', 'durationMinutes', 'durationLabel', 'location', 'latitude', 'longitude', 'updatedAt'])) ||
+           (resource.data.status == 'accepted' &&
+            resource.data.get('assignedVolunteerId', null) != null &&
+            request.resource.data.status == 'scheduled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt'])) ||
            (resource.data.status in ['pending', 'accepted', 'scheduled'] &&
             request.resource.data.status == 'cancelled' &&
             request.resource.data.cancelledBy == request.auth.uid &&
@@ -174,8 +178,9 @@ service cloud.firestore {
         (isRole('elderly') &&
           exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
           get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid &&
-          request.resource.data.status == 'cancelled' &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
+          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.status == request.resource.data.status &&
+          request.resource.data.status in ['cancelled', 'scheduled'] &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt']));
     }
 
     // ---- notifications ----

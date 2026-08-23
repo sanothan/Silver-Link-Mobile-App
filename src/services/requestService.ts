@@ -13,7 +13,7 @@ function fromSnapshot(snapshot: { id: string; data(): DocumentData | undefined }
   const data = snapshot.data();
   if (!data) throw new Error('Request not found.');
   const status = STATUSES.includes(data.status) ? data.status : 'pending';
-  return { id: snapshot.id, createdBy: asText(data.createdBy) ?? '', createdByName: asText(data.createdByName), caregiverId: asText(data.caregiverId), activityType: asText(data.activityType) ?? 'Community support', description: asText(data.description), preferredDate: asDate(data.preferredDate) ?? asDate(data.scheduledAt) ?? new Date(), preferredTime: asText(data.preferredTime) ?? '', durationMinutes: typeof data.durationMinutes === 'number' ? data.durationMinutes : undefined, durationLabel: asText(data.durationLabel), location: asText(data.location) ?? asText(data.generalLocation) ?? '', status, assignedVolunteerId: asText(data.assignedVolunteerId), volunteerName: asText(data.volunteerName), volunteerVerified: data.volunteerVerified === true, createdAt: asDate(data.createdAt), updatedAt: asDate(data.updatedAt) };
+  return { id: snapshot.id, createdBy: asText(data.createdBy) ?? '', createdByName: asText(data.createdByName), caregiverId: asText(data.caregiverId), activityType: asText(data.activityType) ?? 'Community support', description: asText(data.description), preferredDate: asDate(data.preferredDate) ?? asDate(data.scheduledAt) ?? new Date(), preferredTime: asText(data.preferredTime) ?? '', durationMinutes: typeof data.durationMinutes === 'number' ? data.durationMinutes : undefined, durationLabel: asText(data.durationLabel), location: asText(data.location) ?? asText(data.generalLocation) ?? '', latitude: typeof data.latitude === 'number' ? data.latitude : undefined, longitude: typeof data.longitude === 'number' ? data.longitude : undefined, status, assignedVolunteerId: asText(data.assignedVolunteerId), volunteerName: asText(data.volunteerName), volunteerVerified: data.volunteerVerified === true, volunteerPhotoUrl: asText(data.volunteerPhotoUrl), volunteerBio: asText(data.volunteerBio), volunteerExperience: asText(data.volunteerExperience), volunteerRating: typeof data.volunteerRating === 'number' ? data.volunteerRating : undefined, createdAt: asDate(data.createdAt), updatedAt: asDate(data.updatedAt) };
 }
 
 export async function createRequest(uid: string, values: RequestFormValues) {
@@ -21,7 +21,7 @@ export async function createRequest(uid: string, values: RequestFormValues) {
   const owner = await getUserProfile(uid).catch(() => null);
   // Denormalised so an accepting volunteer can notify the right people without
   // needing read access to the elderly user's profile.
-  const result = await addDoc(collection(database, 'requests'), { createdBy: uid, createdByName: owner?.fullName ?? null, caregiverId: owner?.caregiverId ?? null, activityType: values.activityType, description: values.description?.trim() || null, preferredDate: Timestamp.fromDate(values.preferredDate), preferredTime: values.preferredTime, durationMinutes: values.durationMinutes ?? null, durationLabel: values.durationLabel ?? null, location: values.location.trim(), status: 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  const result = await addDoc(collection(database, 'requests'), { createdBy: uid, createdByName: owner?.fullName ?? null, caregiverId: owner?.caregiverId ?? null, activityType: values.activityType, description: values.description?.trim() || null, preferredDate: Timestamp.fromDate(values.preferredDate), preferredTime: values.preferredTime, durationMinutes: values.durationMinutes ?? null, durationLabel: values.durationLabel ?? null, location: values.location.trim(), latitude: values.latitude ?? null, longitude: values.longitude ?? null, status: 'pending', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   return result.id;
 }
 
@@ -42,7 +42,7 @@ export async function getRequestById(requestId: string, uid: string) {
 export async function updateRequest(requestId: string, uid: string, values: RequestFormValues) {
   const current = await getRequestById(requestId, uid);
   if (!['pending', 'accepted'].includes(current.status)) throw new Error('This request can no longer be edited.');
-  await updateDoc(doc(requireDb(), 'requests', requestId), { activityType: values.activityType, description: values.description?.trim() || null, preferredDate: Timestamp.fromDate(values.preferredDate), preferredTime: values.preferredTime, durationMinutes: values.durationMinutes ?? null, durationLabel: values.durationLabel ?? null, location: values.location.trim(), updatedAt: serverTimestamp() });
+  await updateDoc(doc(requireDb(), 'requests', requestId), { activityType: values.activityType, description: values.description?.trim() || null, preferredDate: Timestamp.fromDate(values.preferredDate), preferredTime: values.preferredTime, durationMinutes: values.durationMinutes ?? null, durationLabel: values.durationLabel ?? null, location: values.location.trim(), latitude: values.latitude ?? null, longitude: values.longitude ?? null, updatedAt: serverTimestamp() });
 }
 
 export async function cancelRequest(requestId: string, uid: string) {
@@ -66,7 +66,7 @@ export async function getOpenRequests(max = 20): Promise<CompanionshipRequest[]>
   return snapshot.docs.map(fromSnapshot).sort((a, b) => a.preferredDate.getTime() - b.preferredDate.getTime());
 }
 
-export interface AcceptingVolunteer { uid: string; fullName: string; verified: boolean }
+export interface AcceptingVolunteer { uid: string; fullName: string; verified: boolean; photoUrl?: string; bio?: string; experience?: string; rating?: number }
 
 export type AcceptanceFailure = 'not-a-volunteer' | 'not-found' | 'already-accepted' | 'unavailable' | 'own-request';
 
@@ -103,7 +103,9 @@ export async function acceptRequest(requestId: string, volunteerUid: string): Pr
   const database = requireDb();
   const profile = await getUserProfile(volunteerUid).catch(() => null);
   if (!profile || profile.role !== 'volunteer' || profile.status === 'suspended') throw new RequestAcceptanceError('not-a-volunteer');
-  const volunteer: AcceptingVolunteer = { uid: profile.uid, fullName: profile.fullName.trim() || 'A SilverLink volunteer', verified: profile.status === 'active' };
+  const publicSnapshot = await getDoc(doc(database, 'volunteerProfiles', volunteerUid)).catch(() => null);
+  const publicData = publicSnapshot?.data();
+  const volunteer: AcceptingVolunteer = { uid: profile.uid, fullName: profile.fullName.trim() || 'A SilverLink volunteer', verified: profile.status === 'active', photoUrl: asText(publicData?.photoUrl) ?? profile.photoUrl, bio: asText(publicData?.bio), experience: asText(publicData?.experience), rating: typeof publicData?.rating === 'number' ? publicData.rating : undefined };
 
   const requestRef = doc(database, 'requests', requestId);
   const assignment = assignmentRef(database, requestId);
@@ -119,7 +121,7 @@ export async function acceptRequest(requestId: string, volunteerUid: string): Pr
     if (current.assignedVolunteerId || existingAssignment.exists()) throw new RequestAcceptanceError('already-accepted');
     if (current.status !== 'pending') throw new RequestAcceptanceError(current.status === 'accepted' ? 'already-accepted' : 'unavailable');
 
-    transaction.update(requestRef, { status: 'accepted', assignedVolunteerId: volunteer.uid, volunteerName: volunteer.fullName, volunteerVerified: volunteer.verified, acceptedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    transaction.update(requestRef, { status: 'accepted', assignedVolunteerId: volunteer.uid, volunteerName: volunteer.fullName, volunteerVerified: volunteer.verified, volunteerPhotoUrl: volunteer.photoUrl ?? null, volunteerBio: volunteer.bio ?? null, volunteerExperience: volunteer.experience ?? null, volunteerRating: volunteer.rating ?? null, acceptedAt: serverTimestamp(), updatedAt: serverTimestamp() });
     transaction.set(assignment, { requestId, volunteerId: volunteer.uid, activityType: current.activityType, scheduledAt: Timestamp.fromDate(current.preferredDate), durationMinutes: current.durationMinutes ?? null, generalLocation: current.location, status: 'accepted', createdAt: serverTimestamp() });
     return current;
   });
@@ -143,7 +145,15 @@ export async function acceptRequest(requestId: string, volunteerUid: string): Pr
     // a duplicate — so the alert is dropped rather than the assignment.
     console.warn('[requests] Request accepted but the acceptance notification could not be stored.', cause);
   }
-  return { ...request, status: 'accepted', assignedVolunteerId: volunteer.uid, volunteerName: volunteer.fullName, volunteerVerified: volunteer.verified };
+  return { ...request, status: 'accepted', assignedVolunteerId: volunteer.uid, volunteerName: volunteer.fullName, volunteerVerified: volunteer.verified, volunteerPhotoUrl: volunteer.photoUrl, volunteerBio: volunteer.bio, volunteerExperience: volunteer.experience, volunteerRating: volunteer.rating };
+}
+
+export async function confirmAssignedVolunteer(requestId: string, elderlyUid: string) {
+  const database = requireDb();
+  const current = await getRequestById(requestId, elderlyUid);
+  if (current.status !== 'accepted' || !current.assignedVolunteerId) throw new Error('This volunteer can no longer be confirmed.');
+  await updateDoc(doc(database, 'requests', requestId), { status: 'scheduled', elderConfirmedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  await updateDoc(doc(database, 'requestAssignments', requestId), { status: 'scheduled', elderConfirmedAt: serverTimestamp(), updatedAt: serverTimestamp() }).catch((cause) => console.warn('[requests] Request confirmed but assignment status could not be synchronized.', cause));
 }
 
 /** Requests this volunteer has claimed — the source for the My Activities screen. */

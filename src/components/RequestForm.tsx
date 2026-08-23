@@ -22,7 +22,7 @@ export function RequestForm({ initial, submitLabel, saving, onSubmit }: { initia
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return setError('Please enter a valid time as HH:MM.');
     if (!location.trim()) return setError('Please enter a location.');
     if (description.length > 500) return setError('Please keep the description under 500 characters.');
-    await onSubmit({ activityType, description, preferredDate: parsedDate, preferredTime: time, durationMinutes: selectedDuration?.minutes, durationLabel, location });
+    await onSubmit({ activityType, description, preferredDate: parsedDate, preferredTime: time, durationMinutes: selectedDuration?.minutes, durationLabel, location, latitude: initial?.latitude, longitude: initial?.longitude });
   }
 
   return <View style={styles.form}><Text style={styles.label}>Choose an activity</Text><View style={styles.chips}>{ACTIVITIES.map((item) => <Pressable key={item} accessibilityRole="radio" accessibilityState={{ checked: activityType === item }} onPress={() => setActivityType(item)} style={[styles.chip, activityType === item && styles.chipActive]}><Text style={[styles.chipText, activityType === item && styles.chipTextActive]}>{item}</Text></Pressable>)}</View>
