@@ -138,7 +138,16 @@ service cloud.firestore {
     // ---- notifications ----
     match /notifications/{notificationId} {
       allow read: if isAdmin() || resource.data.userId == request.auth.uid;
-      allow create: if hasPlatformAccess() && request.resource.data.userId == request.auth.uid;
+      // A volunteer accepting a request must be able to notify the elderly
+      // owner and their linked caregiver, so the notification is written for
+      // someone else — but only as an unread acceptance notice stamped with
+      // the volunteer's own uid.
+      allow create: if hasPlatformAccess() &&
+        (request.resource.data.userId == request.auth.uid ||
+          (isRole('volunteer') &&
+            request.resource.data.type == 'request_accepted' &&
+            request.resource.data.volunteerId == request.auth.uid &&
+            request.resource.data.read == false));
       allow update, delete: if isAdmin() || resource.data.userId == request.auth.uid;
     }
 

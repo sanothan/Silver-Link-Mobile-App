@@ -11,7 +11,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 import { logoutUser } from "../../services/authService";
+import { getNotifications } from "../../services/notificationService";
 import { colors } from "../../theme/colors";
+import { formatRelativeTime } from "../../utils/time";
 
 type VisitStatus =
   | "Scheduled"
@@ -25,6 +27,7 @@ type VerificationStatus = "Verified" | "Pending" | "Unverified";
 type DashboardUpdate = {
   id: string;
   title: string;
+  message: string;
   timeLabel: string;
 };
 
@@ -140,8 +143,14 @@ function getUpcomingVisit(): UpcomingVisit | null {
   return null;
 }
 
-function getRecentUpdates(): DashboardUpdate[] {
-  return [];
+async function loadRecentUpdates(uid: string): Promise<DashboardUpdate[]> {
+  const notifications = await getNotifications(uid, 5);
+  return notifications.map((item) => ({
+    id: item.id,
+    title: item.title,
+    message: item.message,
+    timeLabel: formatRelativeTime(item.createdAt),
+  }));
 }
 
 function QuickActionCard({
@@ -169,21 +178,25 @@ export default function CaregiverDashboardScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updates, setUpdates] = useState<DashboardUpdate[]>([]);
 
   useEffect(() => {
     let isActive = true;
 
-    const loadDashboard = () => {
+    const loadDashboard = async () => {
       setLoading(true);
       setError(null);
 
-      setTimeout(() => {
-        if (!isActive) return;
-        setLoading(false);
-      }, 300);
+      // Updates are the caregiver's copy of the notifications raised when a
+      // volunteer accepts a linked elderly user's request.
+      const uid = user?.uid;
+      const recent = uid ? await loadRecentUpdates(uid).catch(() => []) : [];
+      if (!isActive) return;
+      setUpdates(recent);
+      setLoading(false);
     };
 
-    loadDashboard();
+    void loadDashboard();
 
     return () => {
       isActive = false;
@@ -200,7 +213,6 @@ export default function CaregiverDashboardScreen() {
 
   const linkedElderly = getLinkedElderly();
   const upcomingVisit = getUpcomingVisit();
-  const updates = getRecentUpdates();
 
   const handlePlaceholderAction = (title: string) => {
     Alert.alert(
@@ -438,6 +450,7 @@ export default function CaregiverDashboardScreen() {
                     <View style={styles.updateDot} />
                     <View style={styles.updateTextWrap}>
                       <Text style={styles.updateTitle}>{update.title}</Text>
+                      <Text style={styles.updateMessage}>{update.message}</Text>
                       <Text style={styles.updateMeta}>{update.timeLabel}</Text>
                     </View>
                   </View>
@@ -788,6 +801,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textPrimary,
     fontWeight: "600",
+    marginBottom: 4,
+  },
+  updateMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   updateMeta: {

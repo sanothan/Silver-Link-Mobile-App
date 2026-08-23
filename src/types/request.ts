@@ -3,6 +3,8 @@ export type RequestStatus = 'pending' | 'accepted' | 'scheduled' | 'in_progress'
 export interface CompanionshipRequest {
   id: string;
   createdBy: string;
+  createdByName?: string;
+  caregiverId?: string;
   activityType: string;
   description?: string;
   preferredDate: Date;
