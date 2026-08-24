@@ -1,7 +1,492 @@
-import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'; import { useCallback, useState } from 'react'; import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'; import { SafeAreaView } from 'react-native-safe-area-context'; import { useAuth } from '../../../context/AuthContext'; import { cancelRequest, getRequestById } from '../../../services/requestService'; import { colors } from '../../../theme/colors'; import { CANCELLABLE_REQUEST_STATUSES, EDITABLE_REQUEST_STATUSES, REQUEST_STATUS_LABELS, type CompanionshipRequest } from '../../../types/request';
-export default function RequestDetails() { const { id } = useLocalSearchParams<{ id: string }>(); const { user } = useAuth(); const router = useRouter(); const [item, setItem] = useState<CompanionshipRequest | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(false); const load = useCallback(async () => { if (!user || !id) return; setLoading(true); setError(false); try { setItem(await getRequestById(id, user.uid)); } catch { setError(true); } finally { setLoading(false); } }, [id, user]); useFocusEffect(useCallback(() => { void load(); }, [load])); const confirmCancel = () => Alert.alert('Cancel this request?', 'Your volunteer may be notified if one has already been assigned.', [{ text: 'Keep Request', style: 'cancel' }, { text: 'Cancel Request', style: 'destructive', onPress: async () => { if (!user || !id) return; try { await cancelRequest(id, user.uid); Alert.alert('Request cancelled', 'Your request has been cancelled.'); await load(); } catch { Alert.alert("We couldn't cancel your request", 'Please try again.'); } } }]);
-  if (loading) return <Center><ActivityIndicator size="large" color={colors.primary} /></Center>; if (error || !item) return <Center><Text style={styles.title}>Request unavailable</Text><Text style={styles.body}>It may not exist, or you may not have permission to view it.</Text></Center>;
-  return <SafeAreaView style={styles.safe} edges={['top']}><ScrollView contentContainerStyle={styles.content}><Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.back}><Text style={styles.link}>← Back</Text></Pressable><Text style={styles.title}>{item.activityType}</Text><View style={styles.status}><Text style={styles.statusText}>{REQUEST_STATUS_LABELS[item.status]}</Text></View><Section label="What you need" value={item.description || 'No additional description'} /><Section label="Date and time" value={`${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}`} /><Section label="Duration" value={item.durationLabel || (item.durationMinutes ? `${item.durationMinutes} minutes` : 'Flexible')} /><Section label="Location" value={item.location} />{item.volunteerName ? <View style={styles.card}><Text style={styles.label}>YOUR VOLUNTEER</Text><Text style={styles.value}>{item.volunteerName}</Text>{item.volunteerVerified ? <Text style={styles.verified}>✓ Verified volunteer</Text> : null}</View> : null}<View style={styles.actions}>{EDITABLE_REQUEST_STATUSES.includes(item.status) ? <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push(`/(elderly)/edit-request/${item.id}` as Href)}><Text style={styles.primaryText}>Edit Request</Text></Pressable> : null}{CANCELLABLE_REQUEST_STATUSES.includes(item.status) ? <Pressable accessibilityRole="button" accessibilityLabel="Cancel request" style={styles.cancel} onPress={confirmCancel}><Text style={styles.cancelText}>Cancel Request</Text></Pressable> : null}</View></ScrollView></SafeAreaView>;
+import {
+  type Href,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  AppBackground,
+  RequestHeader,
+  StatusChip,
+} from "../../../components/RequestFlowUI";
+import { useAuth } from "../../../context/AuthContext";
+import {
+  cancelRequest,
+  confirmAssignedVolunteer,
+  getRequestById,
+} from "../../../services/requestService";
+import { colors } from "../../../theme/colors";
+import {
+  CANCELLABLE_REQUEST_STATUSES,
+  EDITABLE_REQUEST_STATUSES,
+  type CompanionshipRequest,
+  type RequestStatus,
+} from "../../../types/request";
+
+export default function RequestDetails() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
+  const router = useRouter();
+  const [item, setItem] = useState<CompanionshipRequest | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const load = useCallback(async () => {
+    if (!user || !id) return;
+    setLoading(true);
+    setError(false);
+    try {
+      setItem(await getRequestById(id, user.uid));
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, user]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+  async function confirmVolunteer() {
+    if (!user || !id) return;
+    setBusy(true);
+    try {
+      await confirmAssignedVolunteer(id, user.uid);
+      Alert.alert("Volunteer confirmed", "Your visit is now scheduled.");
+      await load();
+    } catch {
+      Alert.alert("We couldn't confirm this volunteer", "Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const confirmCancel = () =>
+    Alert.alert(
+      "Cancel this request?",
+      "If a volunteer has already accepted it, they may be notified.",
+      [
+        { text: "Keep Request", style: "cancel" },
+        {
+          text: "Cancel Request",
+          style: "destructive",
+          onPress: async () => {
+            if (!user || !id) return;
+            setBusy(true);
+            try {
+              await cancelRequest(id, user.uid);
+              Alert.alert(
+                "Request cancelled",
+                "Your request has been cancelled.",
+              );
+              await load();
+            } catch {
+              Alert.alert(
+                "We couldn't cancel your request",
+                "Please try again.",
+              );
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  if (loading)
+    return (
+      <Center>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loading}>Loading your request…</Text>
+      </Center>
+    );
+  if (error || !item)
+    return (
+      <Center>
+        <Text style={styles.title}>Request unavailable</Text>
+        <Text style={styles.body}>
+          It may not exist, or you may not have permission to view it.
+        </Text>
+      </Center>
+    );
+  return (
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <AppBackground>
+        <RequestHeader title="Request Details" onBack={() => router.back()} />
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.hero}>
+            <Text style={styles.heroIcon}>♡</Text>
+            <View style={styles.heroCopy}>
+              <Text style={styles.title}>{item.activityType}</Text>
+              <StatusChip status={item.status} />
+            </View>
+          </View>
+          <Timeline status={item.status} />
+          {item.volunteerName ? (
+            <VolunteerCard
+              item={item}
+              onView={() =>
+                router.push(`/(elderly)/volunteer-profile/${item.id}` as Href)
+              }
+              onConfirm={() => void confirmVolunteer()}
+              busy={busy}
+            />
+          ) : item.status !== "cancelled" ? (
+            <View style={[styles.card, styles.waitingCard]}>
+              <Text style={styles.waitingTitle}>
+                We&apos;re looking for a suitable volunteer
+              </Text>
+              <Text style={styles.body}>
+                We&apos;ll notify you when someone is available.
+              </Text>
+            </View>
+          ) : null}
+          <Text style={styles.sectionTitle}>Request Summary</Text>
+          <Section
+            label="Date & Time"
+            value={`${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}`}
+          />
+          <Section
+            label="Duration"
+            value={
+              item.durationLabel ||
+              (item.durationMinutes
+                ? `${item.durationMinutes} minutes`
+                : "Flexible")
+            }
+          />
+          <Section label="Location" value={item.location} />
+          <Section
+            label="Notes"
+            value={item.description || "No additional notes"}
+          />
+          <View style={styles.actions}>
+            {EDITABLE_REQUEST_STATUSES.includes(item.status) ? (
+              <Pressable
+                accessibilityRole="button"
+                style={styles.primary}
+                onPress={() =>
+                  router.push(`/(elderly)/edit-request/${item.id}` as Href)
+                }
+              >
+                <Text style={styles.primaryText}>Edit Request</Text>
+              </Pressable>
+            ) : null}
+            {CANCELLABLE_REQUEST_STATUSES.includes(item.status) ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                style={styles.cancel}
+                onPress={confirmCancel}
+              >
+                <Text style={styles.cancelText}>Cancel Request</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </ScrollView>
+      </AppBackground>
+    </SafeAreaView>
+  );
 }
-function Section({ label, value }: { label: string; value: string }) { return <View style={styles.card}><Text style={styles.label}>{label.toUpperCase()}</Text><Text style={styles.value}>{value}</Text></View>; } function Center({ children }: { children: React.ReactNode }) { return <SafeAreaView style={styles.safe}><View style={styles.center}>{children}</View></SafeAreaView>; }
-const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.background }, content: { padding: 20, paddingBottom: 40, gap: 12 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 25 }, back: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' }, link: { color: colors.primary, fontSize: 16, fontWeight: '800' }, title: { color: colors.textPrimary, fontSize: 28, fontWeight: '800', textAlign: 'center' }, body: { color: colors.textSecondary, fontSize: 17, lineHeight: 24, textAlign: 'center', marginTop: 10 }, status: { alignSelf: 'flex-start', borderRadius: 999, backgroundColor: colors.primaryLight, paddingHorizontal: 13, paddingVertical: 8, marginBottom: 8 }, statusText: { color: colors.primaryDark, fontSize: 15, fontWeight: '800' }, card: { backgroundColor: colors.surface, borderRadius: 17, borderWidth: 1, borderColor: colors.border, padding: 17 }, label: { color: colors.textSecondary, fontSize: 13, fontWeight: '800', letterSpacing: 0.6 }, value: { color: colors.textPrimary, fontSize: 18, lineHeight: 25, fontWeight: '700', marginTop: 6 }, verified: { color: colors.success, fontSize: 15, fontWeight: '800', marginTop: 8 }, actions: { gap: 11, marginTop: 10 }, primary: { minHeight: 56, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }, primaryText: { color: colors.textOnPrimary, fontSize: 17, fontWeight: '800' }, cancel: { minHeight: 56, borderRadius: 14, borderWidth: 2, borderColor: colors.error, alignItems: 'center', justifyContent: 'center' }, cancelText: { color: colors.error, fontSize: 17, fontWeight: '800' } });
+
+function VolunteerCard({
+  item,
+  onView,
+  onConfirm,
+  busy,
+}: {
+  item: CompanionshipRequest;
+  onView: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  const awaiting = item.status === "accepted";
+  return (
+    <View style={[styles.card, styles.volunteerCard]}>
+      <Text style={styles.cardLabel}>
+        {awaiting ? "VOLUNTEER READY FOR YOUR APPROVAL" : "YOUR VOLUNTEER"}
+      </Text>
+      <View style={styles.personRow}>
+        {item.volunteerPhotoUrl ? (
+          <Image
+            source={{ uri: item.volunteerPhotoUrl }}
+            style={styles.personPhoto}
+          />
+        ) : (
+          <View style={styles.personAvatar}>
+            <Text style={styles.personInitial}>
+              {item.volunteerName?.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <View style={styles.personCopy}>
+          <Text style={styles.personName}>{item.volunteerName}</Text>
+          {item.volunteerVerified ? (
+            <Text style={styles.verified}>✓ Verified volunteer</Text>
+          ) : null}
+        </View>
+      </View>
+      <View style={styles.volunteerActions}>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.profileButton}
+          onPress={onView}
+        >
+          <Text style={styles.profileText}>View Profile</Text>
+        </Pressable>
+        {awaiting ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ busy }}
+            disabled={busy}
+            style={styles.confirmButton}
+            onPress={onConfirm}
+          >
+            {busy ? (
+              <ActivityIndicator color={colors.textOnPrimary} />
+            ) : (
+              <Text style={styles.confirmText}>Accept Volunteer</Text>
+            )}
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+function Timeline({ status }: { status: RequestStatus }) {
+  const stages: { key: RequestStatus; label: string }[] = [
+    { key: "pending", label: "Request Submitted" },
+    { key: "accepted", label: "Volunteer Found" },
+    { key: "scheduled", label: "Visit Scheduled" },
+    { key: "in_progress", label: "Visit In Progress" },
+    { key: "completed", label: "Completed" },
+  ];
+  const current = stages.findIndex((stage) => stage.key === status);
+  if (status === "cancelled")
+    return (
+      <View style={[styles.card, styles.cancelledCard]}>
+        <Text style={styles.cancelledTitle}>× Request Cancelled</Text>
+      </View>
+    );
+  return (
+    <View style={styles.card}>
+      <Text style={styles.timelineTitle}>Current Status</Text>
+      {stages.map((stage, index) => {
+        const reached = index <= current;
+        return (
+          <View key={stage.key} style={styles.timelineRow}>
+            <View
+              style={[styles.timelineDot, reached && styles.timelineDotReached]}
+            >
+              <Text
+                style={[
+                  styles.timelineSymbol,
+                  reached && styles.timelineSymbolReached,
+                ]}
+              >
+                {reached ? "✓" : "○"}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.timelineText,
+                reached && styles.timelineTextReached,
+              ]}
+            >
+              {stage.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+function Section({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardLabel}>{label.toUpperCase()}</Text>
+      <Text style={styles.cardValue}>{value}</Text>
+    </View>
+  );
+}
+function Center({ children }: { children: React.ReactNode }) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.center}>{children}</View>
+    </SafeAreaView>
+  );
+}
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 18, paddingBottom: 42, gap: 12 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 25,
+  },
+  loading: { color: colors.textSecondary, fontSize: 16, marginTop: 12 },
+  hero: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+  },
+  heroIcon: {
+    width: 58,
+    color: colors.primary,
+    fontSize: 42,
+    fontWeight: "800",
+  },
+  heroCopy: { flex: 1, gap: 10 },
+  title: {
+    color: colors.textPrimary,
+    fontSize: 25,
+    lineHeight: 31,
+    fontWeight: "900",
+  },
+  body: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    lineHeight: 23,
+    marginTop: 5,
+  },
+  sectionTitle: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
+    marginTop: 8,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 17,
+  },
+  cardLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  cardValue: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "700",
+    marginTop: 6,
+  },
+  waitingCard: { backgroundColor: colors.primaryLight, borderColor: "#C7D2FE" },
+  waitingTitle: { color: colors.primaryDark, fontSize: 17, fontWeight: "900" },
+  volunteerCard: {
+    backgroundColor: colors.successLight,
+    borderColor: "#BBF7D0",
+  },
+  personRow: { flexDirection: "row", alignItems: "center", marginTop: 13 },
+  personPhoto: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.surface,
+  },
+  personAvatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  personInitial: { color: colors.success, fontSize: 23, fontWeight: "900" },
+  personCopy: { flex: 1, marginLeft: 12 },
+  personName: { color: colors.textPrimary, fontSize: 19, fontWeight: "900" },
+  verified: {
+    color: colors.success,
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 5,
+  },
+  volunteerActions: { flexDirection: "row", gap: 9, marginTop: 15 },
+  profileButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileText: { color: colors.primary, fontSize: 15, fontWeight: "900" },
+  confirmButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 13,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmText: { color: colors.textOnPrimary, fontSize: 15, fontWeight: "900" },
+  timelineTitle: {
+    color: colors.textPrimary,
+    fontSize: 19,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+  timelineRow: { minHeight: 42, flexDirection: "row", alignItems: "center" },
+  timelineDot: {
+    width: 29,
+    height: 29,
+    borderRadius: 15,
+    backgroundColor: colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 11,
+  },
+  timelineDotReached: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  timelineSymbol: { color: colors.textMuted, fontSize: 15, fontWeight: "900" },
+  timelineSymbolReached: { color: colors.textOnPrimary },
+  timelineText: { color: colors.textMuted, fontSize: 16, fontWeight: "700" },
+  timelineTextReached: { color: colors.textPrimary },
+  cancelledCard: { backgroundColor: colors.errorLight, borderColor: "#FCA5A5" },
+  cancelledTitle: { color: colors.error, fontSize: 17, fontWeight: "900" },
+  actions: { gap: 11, marginTop: 8 },
+  primary: {
+    minHeight: 56,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryText: { color: colors.textOnPrimary, fontSize: 17, fontWeight: "800" },
+  cancel: {
+    minHeight: 56,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colors.error,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelText: { color: colors.error, fontSize: 17, fontWeight: "800" },
+});

@@ -1,10 +1,10 @@
-import { acceptRequest, cancelRequest, getOpenRequests, getRequestForVolunteer, getVolunteerRequests, RequestAcceptanceError } from './requestService';
-import { createAcceptanceNotifications } from './notificationService';
+import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus } from './requestService';
+import { createAcceptanceNotifications, createStatusNotification } from './notificationService';
 import { getUserProfile } from './userService';
 import type { UserProfile } from '../types/user';
 
 jest.mock('./firebaseConfig', () => ({ db: { id: 'test-db' } }));
-jest.mock('./notificationService', () => ({ createAcceptanceNotifications: jest.fn(async () => undefined) }));
+jest.mock('./notificationService', () => ({ createAcceptanceNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
 jest.mock('./userService', () => ({ getUserProfile: jest.fn() }));
 
 /**
@@ -111,7 +111,7 @@ const requestData = (id: string) => firestore.__store.get(`requests/${id}`)?.dat
 const assignmentData = (id: string) => firestore.__store.get(`requestAssignments/${id}`)?.data;
 const capture = (promise: Promise<unknown>) => promise.then(() => 'accepted' as const).catch((error: unknown) => error);
 
-beforeEach(() => {
+  beforeEach(() => {
   firestore.__reset();
   jest.clearAllMocks();
   (getUserProfile as jest.Mock).mockImplementation(async (uid: string) => {
@@ -200,6 +200,7 @@ describe('acceptRequest — rejections', () => {
     seedRequest('r1');
     await acceptRequest('r1', 'vol-a');
     (createAcceptanceNotifications as jest.Mock).mockClear();
+    (createStatusNotification as jest.Mock).mockClear();
     await capture(acceptRequest('r1', 'vol-b'));
     expect(createAcceptanceNotifications).not.toHaveBeenCalled();
   });
@@ -271,12 +272,53 @@ describe('cancelRequest — keeps the assignment record in step', () => {
     await cancelRequest('r1', 'elderly-1');
     expect(requestData('r1')?.status).toBe('cancelled');
     expect(assignmentData('r1')?.status).toBe('cancelled');
+    expect(createStatusNotification).toHaveBeenCalledWith(expect.objectContaining({ elderlyId: 'elderly-1', requestId: 'r1', status: 'cancelled' }));
   });
 
   it('does not touch requestAssignments when the request was never accepted', async () => {
     seedRequest('r1');
     await cancelRequest('r1', 'elderly-1');
     expect(firestore.__store.has('requestAssignments/r1')).toBe(false);
+  });
+});
+
+describe('confirmAssignedVolunteer — elderly approval', () => {
+  it('moves an accepted request and assignment to scheduled', async () => {
+    seedRequest('r1');
+    await acceptRequest('r1', 'vol-a');
+    await confirmAssignedVolunteer('r1', 'elderly-1');
+    expect(requestData('r1')?.status).toBe('scheduled');
+    expect(assignmentData('r1')?.status).toBe('scheduled');
+    expect(createStatusNotification).toHaveBeenCalledWith(expect.objectContaining({ elderlyId: 'elderly-1', requestId: 'r1', status: 'scheduled' }));
+  });
+
+  it('rejects confirmation by someone other than the request owner', async () => {
+    seedRequest('r1');
+    await acceptRequest('r1', 'vol-a');
+    await expect(confirmAssignedVolunteer('r1', 'caregiver-1')).rejects.toThrow('You cannot access this request.');
+  });
+
+  it('rejects confirmation before a volunteer accepts', async () => {
+    seedRequest('r1');
+    await expect(confirmAssignedVolunteer('r1', 'elderly-1')).rejects.toThrow('This volunteer can no longer be confirmed.');
+  });
+});
+
+describe('volunteer visit progress notifications', () => {
+  it('notifies when a scheduled visit starts and then completes', async () => {
+    seedRequest('r1'); await acceptRequest('r1', 'vol-a'); await confirmAssignedVolunteer('r1', 'elderly-1');
+    await updateAssignedRequestStatus('r1', 'vol-a', 'in_progress');
+    expect(requestData('r1')?.status).toBe('in_progress');
+    expect(createStatusNotification).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'r1', status: 'in_progress', volunteerId: 'vol-a' }));
+    await updateAssignedRequestStatus('r1', 'vol-a', 'completed');
+    expect(requestData('r1')?.status).toBe('completed');
+    expect(createStatusNotification).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'r1', status: 'completed', volunteerId: 'vol-a' }));
+  });
+
+  it('rejects an invalid or unassigned volunteer transition', async () => {
+    seedRequest('r1'); await acceptRequest('r1', 'vol-a'); await confirmAssignedVolunteer('r1', 'elderly-1');
+    await expect(updateAssignedRequestStatus('r1', 'vol-b', 'in_progress')).rejects.toThrow('not assigned');
+    await expect(updateAssignedRequestStatus('r1', 'vol-a', 'completed')).rejects.toThrow('cannot move');
   });
 });
 
