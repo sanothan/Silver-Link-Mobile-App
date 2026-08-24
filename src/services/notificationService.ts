@@ -16,6 +16,7 @@ import { db } from "./firebaseConfig";
 import {
   ACCEPTANCE_NOTIFICATION_TITLE,
   ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER,
+  ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER,
   buildAcceptanceMessage,
   buildStatusNotificationContent,
   notificationTypeForStatus,
@@ -58,7 +59,12 @@ function fromSnapshot(snapshot: {
   return {
     id: snapshot.id,
     userId: asText(data.userId) ?? "",
-    audience: data.audience === "caregiver" ? "caregiver" : "elderly",
+    audience:
+      data.audience === "caregiver"
+        ? "caregiver"
+        : data.audience === "volunteer"
+          ? "volunteer"
+          : "elderly",
     type,
     title: asText(data.title) ?? ACCEPTANCE_NOTIFICATION_TITLE,
     message: asText(data.message) ?? "",
@@ -91,7 +97,9 @@ function acceptancePayload(
     title:
       audience === "caregiver"
         ? ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER
-        : ACCEPTANCE_NOTIFICATION_TITLE,
+        : audience === "volunteer"
+          ? ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER
+          : ACCEPTANCE_NOTIFICATION_TITLE,
     message: buildAcceptanceMessage(context, audience),
     requestId: context.requestId,
     volunteerId: context.volunteerId,
@@ -116,6 +124,14 @@ export async function createAcceptanceNotifications(
       notificationId(context.requestId, type, "elderly", context.elderlyId),
     ),
     acceptancePayload(context, context.elderlyId, "elderly"),
+  );
+  batch.set(
+    doc(
+      database,
+      "notifications",
+      notificationId(context.requestId, type, "volunteer", context.volunteerId),
+    ),
+    acceptancePayload(context, context.volunteerId, "volunteer"),
   );
   if (context.caregiverId && context.caregiverId !== context.elderlyId)
     batch.set(

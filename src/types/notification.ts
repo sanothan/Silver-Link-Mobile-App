@@ -6,7 +6,7 @@ export type NotificationType =
   | "request_started"
   | "request_completed"
   | "request_cancelled";
-export type NotificationAudience = "elderly" | "caregiver";
+export type NotificationAudience = "elderly" | "caregiver" | "volunteer";
 
 export interface AppNotification {
   id: string;
@@ -67,11 +67,14 @@ export function buildAcceptanceMessage(
       : "Your linked family member’s";
     return `${context.volunteerName}${verified} accepted ${who} ${context.activityType} request for ${when}.`;
   }
+  if (audience === "volunteer")
+    return `You accepted a ${context.activityType} request for ${when}.`;
   return `${context.volunteerName}${verified} accepted your ${context.activityType} request. They will support you on ${when}.`;
 }
 
 export const ACCEPTANCE_NOTIFICATION_TITLE = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER = "Volunteer Found";
+export const ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER = "Request Accepted";
 
 export function notificationTypeForStatus(
   status: NotifiableRequestStatus,
