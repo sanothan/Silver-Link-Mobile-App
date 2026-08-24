@@ -158,13 +158,14 @@ service cloud.firestore {
     }
 
     match /requestAssignments/{assignmentId} {
-      // Guarded with exists() first: a volunteer's acceptance transaction
-      // reads this doc to check whether the request is already claimed, and
-      // on the first-ever acceptance it doesn't exist yet. Dereferencing
-      // resource.data on a nonexistent document throws inside the rule
-      // engine, which Firestore surfaces as "Missing or insufficient
-      // permissions" instead of a clean "not found".
+      // A volunteer's acceptance transaction reads this doc to check whether
+      // the request is already claimed, and on the first-ever acceptance it
+      // doesn't exist yet. That "not found" read must itself be allowed (any
+      // signed-in user may confirm absence) — only once the document exists
+      // do we dereference resource.data to restrict who may read its content.
       allow read: if isAdmin() ||
+        (isSignedIn() &&
+          !exists(/databases/$(database)/documents/requestAssignments/$(assignmentId))) ||
         (exists(/databases/$(database)/documents/requestAssignments/$(assignmentId)) &&
           (resource.data.volunteerId == request.auth.uid ||
             (isSignedIn() &&
