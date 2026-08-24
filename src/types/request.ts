@@ -1,3 +1,23 @@
+/** The canonical activity-type values a request can be created and filtered with — kept in one place so the request form and the browse filter never drift apart. */
+export const REQUEST_ACTIVITY_TYPES = [
+  "Friendly Conversation",
+  "Walking Companionship",
+  "Smartphone Help",
+  "Grocery Collection",
+  "Medicine Collection",
+  "Online Service Help",
+  "Appointment Companionship",
+  "Other",
+] as const;
+
+/** The canonical duration options a request can be created and filtered with. */
+export const REQUEST_DURATION_OPTIONS = [
+  { label: "30 minutes", minutes: 30 },
+  { label: "1 hour", minutes: 60 },
+  { label: "1–2 hours", minutes: 90 },
+  { label: "Flexible", minutes: undefined },
+] as const;
+
 export type RequestStatus =
   | "pending"
   | "accepted"
