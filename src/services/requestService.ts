@@ -484,6 +484,27 @@ export async function getRequestForVolunteer(
 }
 
 /**
+ * A single request for the volunteer's details view, covering both stages of
+ * that screen: still-open (pending, unassigned — browsing before acceptance)
+ * and already assigned to this volunteer (tracking an accepted visit). A
+ * request assigned to someone else, or in any other state, is not theirs to
+ * view in detail.
+ */
+export async function getRequestForVolunteerView(
+  requestId: string,
+  volunteerUid: string,
+): Promise<CompanionshipRequest> {
+  const snapshot = await getDoc(doc(requireDb(), "requests", requestId));
+  if (!snapshot.exists()) throw new Error("Request not found.");
+  const request = fromSnapshot(snapshot);
+  const isOpen = request.status === "pending" && !request.assignedVolunteerId;
+  const isMine = request.assignedVolunteerId === volunteerUid;
+  if (!isOpen && !isMine)
+    throw new Error("This request is no longer available.");
+  return request;
+}
+
+/**
  * Get all requests for an elderly user, accessible by a caregiver with accepted link.
  * For caregiver read-only access to linked elderly user's requests.
  */

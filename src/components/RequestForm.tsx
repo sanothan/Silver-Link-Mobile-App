@@ -8,24 +8,14 @@ import {
   View,
 } from "react-native";
 import { colors } from "../theme/colors";
-import type { RequestFormValues } from "../types/request";
+import {
+  REQUEST_ACTIVITY_TYPES,
+  REQUEST_DURATION_OPTIONS,
+  type RequestFormValues,
+} from "../types/request";
 
-const ACTIVITIES = [
-  "Friendly Conversation",
-  "Walking Companionship",
-  "Smartphone Help",
-  "Grocery Collection",
-  "Medicine Collection",
-  "Online Service Help",
-  "Appointment Companionship",
-  "Other",
-];
-const DURATIONS = [
-  { label: "30 minutes", minutes: 30 },
-  { label: "1 hour", minutes: 60 },
-  { label: "1–2 hours", minutes: 90 },
-  { label: "Flexible", minutes: undefined },
-];
+const ACTIVITIES = REQUEST_ACTIVITY_TYPES;
+const DURATIONS = REQUEST_DURATION_OPTIONS;
 const dateText = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 

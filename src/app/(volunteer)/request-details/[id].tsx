@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../context/AuthContext';
-import { getRequestForVolunteer, updateAssignedRequestStatus } from '../../../services/requestService';
+import { acceptRequest, getRequestForVolunteerView, RequestAcceptanceError, updateAssignedRequestStatus } from '../../../services/requestService';
 import { colors } from '../../../theme/colors';
 import { REQUEST_STATUS_LABELS, type CompanionshipRequest } from '../../../types/request';
 
@@ -13,7 +13,7 @@ export default function VolunteerRequestDetails() {
   const router = useRouter();
   const [item, setItem] = useState<CompanionshipRequest | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(false);
   const [saving, setSaving] = useState(false);
-  const load = useCallback(async () => { if (!user || !id) return; setLoading(true); setError(false); try { setItem(await getRequestForVolunteer(id, user.uid)); } catch { setError(true); } finally { setLoading(false); } }, [id, user]);
+  const load = useCallback(async () => { if (!user || !id) return; setLoading(true); setError(false); try { setItem(await getRequestForVolunteerView(id, user.uid)); } catch { setError(true); } finally { setLoading(false); } }, [id, user]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   const advance = async (nextStatus: 'in_progress' | 'completed') => {
     if (!user || !id) return; setSaving(true);
@@ -21,9 +21,27 @@ export default function VolunteerRequestDetails() {
     catch { Alert.alert("We couldn't update this visit", 'Please refresh and try again.'); }
     finally { setSaving(false); }
   };
+  const accept = async () => {
+    if (!user || !id) return; setSaving(true);
+    try {
+      await acceptRequest(id, user.uid);
+      Alert.alert('Request Accepted', 'This activity has been added to your upcoming activities.', [
+        { text: 'View Upcoming Activities', onPress: () => router.replace('/(volunteer)/activities') },
+      ]);
+      void load();
+    } catch (cause) {
+      const message = cause instanceof RequestAcceptanceError ? cause.message : "We couldn't accept this request. Please try again.";
+      Alert.alert(cause instanceof RequestAcceptanceError && cause.reason === 'already-accepted' ? 'This request is no longer available.' : "We couldn't accept this request", message);
+      void load();
+    } finally { setSaving(false); }
+  };
+  const confirmAccept = () => item && Alert.alert('Accept this request?', `${item.activityType} on ${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}.`, [{ text: 'Not now', style: 'cancel' }, { text: 'Accept', onPress: () => void accept() }]);
 
   if (loading) return <Center><ActivityIndicator size="large" color={colors.primary} /></Center>;
-  if (error || !item) return <Center><Text style={styles.title}>Request unavailable</Text><Text style={styles.body}>It may not exist, or it may not be assigned to you.</Text></Center>;
+  if (error || !item) return <Center><Text style={styles.title}>Request unavailable</Text><Text style={styles.body}>It may not exist, or it may no longer be available.</Text></Center>;
+
+  const isOpen = item.status === 'pending' && !item.assignedVolunteerId;
+  const isMine = item.assignedVolunteerId === user?.uid;
 
   return <SafeAreaView style={styles.safe} edges={['top']}>
     <ScrollView contentContainerStyle={styles.content}>
@@ -34,9 +52,10 @@ export default function VolunteerRequestDetails() {
       <Section label="Date and time" value={`${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}`} />
       <Section label="Duration" value={item.durationLabel || (item.durationMinutes ? `${item.durationMinutes} minutes` : 'Flexible')} />
       <Section label="Location" value={item.location} />
-      {item.createdByName ? <View style={styles.card}><Text style={styles.label}>REQUESTED BY</Text><Text style={styles.value}>{item.createdByName}</Text></View> : null}
-      {item.status === 'scheduled' ? <Pressable accessibilityRole="button" accessibilityLabel="Start this visit" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('in_progress')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Start Visit'}</Text></Pressable> : null}
-      {item.status === 'in_progress' ? <Pressable accessibilityRole="button" accessibilityLabel="Mark this visit completed" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('completed')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Complete Visit'}</Text></Pressable> : null}
+      {isMine && item.createdByName ? <View style={styles.card}><Text style={styles.label}>REQUESTED BY</Text><Text style={styles.value}>{item.createdByName}</Text></View> : null}
+      {isOpen ? <Pressable accessibilityRole="button" accessibilityLabel="Accept this request" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={confirmAccept}><Text style={styles.actionText}>{saving ? 'Accepting…' : 'Accept Request'}</Text></Pressable> : null}
+      {isMine && item.status === 'scheduled' ? <Pressable accessibilityRole="button" accessibilityLabel="Start this visit" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('in_progress')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Start Visit'}</Text></Pressable> : null}
+      {isMine && item.status === 'in_progress' ? <Pressable accessibilityRole="button" accessibilityLabel="Mark this visit completed" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('completed')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Complete Visit'}</Text></Pressable> : null}
     </ScrollView>
   </SafeAreaView>;
 }
