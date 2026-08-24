@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -11,8 +12,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 import { logoutUser } from "../../services/authService";
+import {
+    cancelCaregiverLinkRequest,
+    getCaregiverLinks,
+} from "../../services/caregiverLinkService";
 import { getNotifications } from "../../services/notificationService";
 import { colors } from "../../theme/colors";
+import type { CaregiverLinkDisplay } from "../../types/caregiver";
 import { formatRelativeTime } from "../../utils/time";
 
 type VisitStatus =
@@ -176,9 +182,14 @@ function QuickActionCard({
 
 export default function CaregiverDashboardScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updates, setUpdates] = useState<DashboardUpdate[]>([]);
+  const [caregiverLinks, setCaregiverLinks] = useState<CaregiverLinkDisplay[]>(
+    [],
+  );
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -187,13 +198,29 @@ export default function CaregiverDashboardScreen() {
       setLoading(true);
       setError(null);
 
-      // Updates are the caregiver's copy of the notifications raised when a
-      // volunteer accepts a linked elderly user's request.
-      const uid = user?.uid;
-      const recent = uid ? await loadRecentUpdates(uid).catch(() => []) : [];
-      if (!isActive) return;
-      setUpdates(recent);
-      setLoading(false);
+      try {
+        const uid = user?.uid;
+        if (!uid) return;
+
+        // Load caregiver links
+        const links = await getCaregiverLinks(uid);
+        if (!isActive) return;
+        setCaregiverLinks(links);
+
+        // Load updates (notifications)
+        const recent = await loadRecentUpdates(uid).catch(() => []);
+        if (!isActive) return;
+        setUpdates(recent);
+      } catch (err) {
+        if (!isActive) return;
+        console.error("Dashboard error:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to load dashboard",
+        );
+      } finally {
+        if (!isActive) return;
+        setLoading(false);
+      }
     };
 
     void loadDashboard();
@@ -213,6 +240,43 @@ export default function CaregiverDashboardScreen() {
 
   const linkedElderly = getLinkedElderly();
   const upcomingVisit = getUpcomingVisit();
+
+  const handleLinkElderly = () => {
+    router.push("/link-elderly" as any);
+  };
+
+  const handleCancelRequest = (linkId: string, elderlyName: string) => {
+    Alert.alert(
+      "Cancel connection request?",
+      `The connection request to ${elderlyName} will be cancelled.`,
+      [
+        { text: "Keep Request", style: "cancel" },
+        {
+          text: "Cancel Request",
+          style: "destructive",
+          onPress: async () => {
+            if (!user?.uid) return;
+            setCancelling(linkId);
+            try {
+              await cancelCaregiverLinkRequest(linkId, user.uid);
+              setCaregiverLinks((prev) =>
+                prev.filter((link) => link.id !== linkId),
+              );
+            } catch (err) {
+              Alert.alert(
+                "Error",
+                err instanceof Error
+                  ? err.message
+                  : "Could not cancel request.",
+              );
+            } finally {
+              setCancelling(null);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handlePlaceholderAction = (title: string) => {
     Alert.alert(
@@ -312,19 +376,88 @@ export default function CaregiverDashboardScreen() {
                   <Text style={styles.inlineActionArrow}>→</Text>
                 </Pressable>
               </View>
+            ) : caregiverLinks.length > 0 ? (
+              <View>
+                {caregiverLinks.map((link) => {
+                  const isPending = link.status === "pending";
+                  return (
+                    <View
+                      key={link.id}
+                      style={[styles.card, { marginBottom: 12 }]}
+                    >
+                      <View style={styles.lovedOneHeader}>
+                        <View style={styles.avatarCircle}>
+                          <Text style={styles.avatarText}>
+                            {link.elderlyName.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.lovedOneMeta}>
+                          <Text style={styles.lovedOneName}>
+                            {link.elderlyName}
+                          </Text>
+                          <View style={styles.statusBadgeRow}>
+                            <View
+                              style={[
+                                styles.statusBadge,
+                                isPending
+                                  ? styles.statusPendingBadge
+                                  : styles.statusAcceptedBadge,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.statusBadgeSmallText,
+                                  isPending
+                                    ? styles.statusPendingText
+                                    : styles.statusAcceptedText,
+                                ]}
+                              >
+                                {isPending
+                                  ? "Waiting for Confirmation"
+                                  : "Connected"}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                      {isPending && (
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={cancelling === link.id}
+                          onPress={() =>
+                            handleCancelRequest(link.id, link.elderlyName)
+                          }
+                          style={styles.inlineAction}
+                        >
+                          <Text
+                            style={[
+                              styles.inlineActionText,
+                              cancelling === link.id && { opacity: 0.5 },
+                            ]}
+                          >
+                            {cancelling === link.id
+                              ? "Cancelling..."
+                              : "Cancel"}
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             ) : (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>
                   Connect with your loved one
                 </Text>
                 <Text style={styles.cardText}>
-                  Link an elderly family member to monitor their scheduled
-                  companionship activities.
+                  Send a connection request to an elderly family member. They
+                  must confirm the request before the connection becomes active.
                 </Text>
                 <Pressable
                   accessibilityRole="button"
                   style={styles.primaryButton}
-                  onPress={() => handlePlaceholderAction("Link Elderly User")}
+                  onPress={handleLinkElderly}
                 >
                   <Text style={styles.primaryButtonText}>
                     Link Elderly User
@@ -913,5 +1046,30 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontSize: 15,
     fontWeight: "700",
+  },
+  statusBadgeRow: {
+    marginTop: 6,
+  },
+  statusPendingBadge: {
+    backgroundColor: colors.warningLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusAcceptedBadge: {
+    backgroundColor: colors.successLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeSmallText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  statusPendingText: {
+    color: colors.warning,
+  },
+  statusAcceptedText: {
+    color: colors.success,
   },
 });
