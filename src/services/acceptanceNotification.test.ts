@@ -1,4 +1,4 @@
-import { buildAcceptanceMessage, buildStatusNotificationContent, notificationTypeForStatus, type AcceptanceNotificationContext } from '../types/notification';
+import { buildAcceptanceMessage, buildScheduleConfirmationMessage, buildStatusNotificationContent, notificationTypeForStatus, type AcceptanceNotificationContext, type ScheduleConfirmationContext } from '../types/notification';
 
 const context: AcceptanceNotificationContext = {
   elderlyId: 'elderly-1',
@@ -28,6 +28,36 @@ describe('buildAcceptanceMessage', () => {
 
   it('omits the verified marker for an unverified volunteer', () => {
     expect(buildAcceptanceMessage({ ...context, volunteerVerified: false }, 'elderly')).not.toContain('verified volunteer');
+  });
+});
+
+describe('buildScheduleConfirmationMessage', () => {
+  const scheduleContext: ScheduleConfirmationContext = {
+    elderlyId: 'elderly-1',
+    elderlyName: 'Margaret Perera',
+    caregiverId: 'caregiver-1',
+    requestId: 'request-1',
+    activityType: 'Grocery Collection',
+    preferredDate: new Date(2026, 8, 3),
+    preferredTime: '10:00 AM',
+    volunteerId: 'volunteer-1',
+    volunteerName: 'Nadia Fernando',
+  };
+
+  it('tells the elderly user who is coming and when', () => {
+    const message = buildScheduleConfirmationMessage(scheduleContext, 'elderly');
+    expect(message).toContain('Nadia Fernando');
+    expect(message).toContain('10:00 AM');
+  });
+
+  it('tells the volunteer their visit is confirmed', () => {
+    const message = buildScheduleConfirmationMessage(scheduleContext, 'volunteer');
+    expect(message).toContain('Grocery Collection');
+    expect(message).toContain('confirmed');
+  });
+
+  it('names the linked elderly user in the caregiver copy', () => {
+    expect(buildScheduleConfirmationMessage(scheduleContext, 'caregiver')).toContain("Margaret Perera's");
   });
 });
 
