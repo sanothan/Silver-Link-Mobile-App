@@ -216,6 +216,7 @@ service cloud.firestore {
          (isRole('volunteer') && request.resource.data.volunteerId == request.auth.uid &&
           get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid &&
           (request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy ||
+           request.resource.data.userId == request.auth.uid ||
            (request.resource.data.type == 'request_accepted' && request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null))) &&
           ((request.resource.data.type == 'request_accepted' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'accepted') ||
            (request.resource.data.type == 'request_started' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'in_progress') ||
