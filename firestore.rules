@@ -204,16 +204,25 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read: if isAdmin() || resource.data.userId == request.auth.uid;
       // Status alerts must point to a real request in the matching stored
-      // state. Elders can create their own scheduled/cancelled alert; assigned
-      // volunteers can create accepted/started/completed alerts for the owner
-      // (and the linked caregiver for acceptance only).
+      // state. Elders can create their own cancelled alert, and — once the
+      // request is scheduled — the scheduled alert for themselves, the
+      // assigned volunteer, and the linked caregiver. Assigned volunteers can
+      // create accepted/started/completed alerts for the owner (and the
+      // linked caregiver for acceptance only).
       allow create: if hasPlatformAccess() && request.resource.data.read == false &&
         request.resource.data.requestId is string &&
         exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
-        ((request.resource.data.userId == request.auth.uid &&
-          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid &&
-          ((request.resource.data.type == 'request_scheduled' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'scheduled') ||
-           (request.resource.data.type == 'request_cancelled' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'cancelled'))) ||
+        ((get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid &&
+          ((request.resource.data.type == 'request_scheduled' &&
+            get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'scheduled' &&
+            request.resource.data.userId in [
+              request.auth.uid,
+              get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId,
+              get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null)
+            ]) ||
+           (request.resource.data.type == 'request_cancelled' &&
+            request.resource.data.userId == request.auth.uid &&
+            get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'cancelled'))) ||
          (isRole('volunteer') && request.resource.data.volunteerId == request.auth.uid &&
           get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid &&
           (request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy ||

@@ -1,10 +1,10 @@
 import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus } from './requestService';
-import { createAcceptanceNotifications, createStatusNotification } from './notificationService';
+import { createAcceptanceNotifications, createScheduleConfirmationNotifications, createStatusNotification } from './notificationService';
 import { getUserProfile } from './userService';
 import type { UserProfile } from '../types/user';
 
 jest.mock('./firebaseConfig', () => ({ db: { id: 'test-db' } }));
-jest.mock('./notificationService', () => ({ createAcceptanceNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
+jest.mock('./notificationService', () => ({ createAcceptanceNotifications: jest.fn(async () => undefined), createScheduleConfirmationNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
 jest.mock('./userService', () => ({ getUserProfile: jest.fn() }));
 
 /**
@@ -289,7 +289,11 @@ describe('confirmAssignedVolunteer — elderly approval', () => {
     await confirmAssignedVolunteer('r1', 'elderly-1');
     expect(requestData('r1')?.status).toBe('scheduled');
     expect(assignmentData('r1')?.status).toBe('scheduled');
-    expect(createStatusNotification).toHaveBeenCalledWith(expect.objectContaining({ elderlyId: 'elderly-1', requestId: 'r1', status: 'scheduled' }));
+    expect(createScheduleConfirmationNotifications).toHaveBeenCalledWith(expect.objectContaining({
+      elderlyId: 'elderly-1', elderlyName: 'Margaret Perera', caregiverId: 'caregiver-1',
+      requestId: 'r1', activityType: 'Grocery Collection', preferredTime: '10:00 AM',
+      volunteerId: 'vol-a', volunteerName: 'Nadia Fernando',
+    }));
   });
 
   it('rejects confirmation by someone other than the request owner', async () => {

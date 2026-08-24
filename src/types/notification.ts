@@ -47,6 +47,18 @@ export interface StatusNotificationContext {
   volunteerId?: string;
 }
 
+export interface ScheduleConfirmationContext {
+  elderlyId: string;
+  elderlyName?: string;
+  caregiverId?: string;
+  requestId: string;
+  activityType: string;
+  preferredDate: Date;
+  preferredTime: string;
+  volunteerId: string;
+  volunteerName: string;
+}
+
 function whenLabel(date: Date, time: string): string {
   const day = new Intl.DateTimeFormat(undefined, {
     month: "long",
@@ -75,6 +87,23 @@ export function buildAcceptanceMessage(
 export const ACCEPTANCE_NOTIFICATION_TITLE = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER = "Request Accepted";
+export const SCHEDULE_CONFIRMATION_TITLE = "Visit Scheduled";
+
+export function buildScheduleConfirmationMessage(
+  context: ScheduleConfirmationContext,
+  audience: NotificationAudience,
+): string {
+  const when = whenLabel(context.preferredDate, context.preferredTime);
+  if (audience === "caregiver") {
+    const who = context.elderlyName
+      ? `${context.elderlyName}'s`
+      : "Your linked family member’s";
+    return `${who} ${context.activityType} visit with ${context.volunteerName} has been scheduled for ${when}.`;
+  }
+  if (audience === "volunteer")
+    return `Your ${context.activityType} visit is confirmed for ${when}.`;
+  return `Your visit with ${context.volunteerName} has been scheduled for ${when}.`;
+}
 
 export function notificationTypeForStatus(
   status: NotifiableRequestStatus,
