@@ -38,3 +38,12 @@ export interface AdminUserRow {
   role: string;
   status: string;
 }
+
+export interface AdminRequestRow {
+  id: string;
+  ownerName: string;
+  category: string;
+  status: string;
+  assignedVolunteerName?: string;
+  createdAt?: Date;
+}
