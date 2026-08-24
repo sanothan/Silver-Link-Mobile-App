@@ -1,29 +1,29 @@
 import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  runTransaction,
-  serverTimestamp,
-  Timestamp,
-  updateDoc,
-  where,
-  type DocumentData,
+    addDoc,
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    limit,
+    query,
+    runTransaction,
+    serverTimestamp,
+    Timestamp,
+    updateDoc,
+    where,
+    type DocumentData,
 } from "firebase/firestore";
+import type {
+    CompanionshipRequest,
+    RequestFormValues,
+    RequestStatus,
+} from "../types/request";
 import { db } from "./firebaseConfig";
 import {
-  createAcceptanceNotifications,
-  createStatusNotification,
+    createAcceptanceNotifications,
+    createStatusNotification,
 } from "./notificationService";
 import { getUserProfile } from "./userService";
-import type {
-  CompanionshipRequest,
-  RequestFormValues,
-  RequestStatus,
-} from "../types/request";
 
 function requireDb() {
   if (!db) throw new Error("Firebase is not configured.");
@@ -481,4 +481,25 @@ export async function getRequestForVolunteer(
   if (request.assignedVolunteerId !== volunteerUid)
     throw new Error("This request is not assigned to you.");
   return request;
+}
+
+/**
+ * Get all requests for an elderly user, accessible by a caregiver with accepted link.
+ * For caregiver read-only access to linked elderly user's requests.
+ */
+export async function getRequestsForLinkedElderlyUser(
+  elderlyUserId: string,
+): Promise<CompanionshipRequest[]> {
+  const database = requireDb();
+  const snapshot = await getDocs(
+    query(
+      collection(database, "requests"),
+      where("createdBy", "==", elderlyUserId),
+    ),
+  );
+  return snapshot.docs
+    .map(fromSnapshot)
+    .sort(
+      (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+    );
 }
