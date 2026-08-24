@@ -1,5 +1,12 @@
-export type NotificationType = 'request_accepted';
-export type NotificationAudience = 'elderly' | 'caregiver';
+import type { RequestStatus } from "./request";
+
+export type NotificationType =
+  | "request_accepted"
+  | "request_scheduled"
+  | "request_started"
+  | "request_completed"
+  | "request_cancelled";
+export type NotificationAudience = "elderly" | "caregiver";
 
 export interface AppNotification {
   id: string;
@@ -29,21 +36,85 @@ export interface AcceptanceNotificationContext {
   volunteerVerified: boolean;
 }
 
+export type NotifiableRequestStatus = Exclude<RequestStatus, "pending">;
+export interface StatusNotificationContext {
+  elderlyId: string;
+  requestId: string;
+  activityType: string;
+  status: NotifiableRequestStatus;
+  preferredDate: Date;
+  preferredTime: string;
+  volunteerId?: string;
+}
+
 function whenLabel(date: Date, time: string): string {
-  const day = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'short', day: 'numeric' }).format(date);
+  const day = new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    day: "numeric",
+  }).format(date);
   return time ? `${day} at ${time}` : day;
 }
 
-/** Volunteer details the elderly user and caregiver may see: name, verification, and what was accepted. */
-export function buildAcceptanceMessage(context: AcceptanceNotificationContext, audience: NotificationAudience): string {
-  const verified = context.volunteerVerified ? ' (verified volunteer)' : '';
+export function buildAcceptanceMessage(
+  context: AcceptanceNotificationContext,
+  audience: NotificationAudience,
+): string {
+  const verified = context.volunteerVerified ? " (verified volunteer)" : "";
   const when = whenLabel(context.preferredDate, context.preferredTime);
-  if (audience === 'caregiver') {
-    const who = context.elderlyName ? `${context.elderlyName}'s` : 'Your linked family member\u2019s';
+  if (audience === "caregiver") {
+    const who = context.elderlyName
+      ? `${context.elderlyName}'s`
+      : "Your linked family member’s";
     return `${context.volunteerName}${verified} accepted ${who} ${context.activityType} request for ${when}.`;
   }
   return `${context.volunteerName}${verified} accepted your ${context.activityType} request. They will support you on ${when}.`;
 }
 
-export const ACCEPTANCE_NOTIFICATION_TITLE = 'Volunteer accepted your request';
-export const ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER = 'A volunteer accepted a request';
+export const ACCEPTANCE_NOTIFICATION_TITLE = "Volunteer Found";
+export const ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER = "Volunteer Found";
+
+export function notificationTypeForStatus(
+  status: NotifiableRequestStatus,
+): NotificationType {
+  return status === "accepted"
+    ? "request_accepted"
+    : status === "scheduled"
+      ? "request_scheduled"
+      : status === "in_progress"
+        ? "request_started"
+        : status === "completed"
+          ? "request_completed"
+          : "request_cancelled";
+}
+
+export function buildStatusNotificationContent(
+  context: StatusNotificationContext,
+): { title: string; message: string } {
+  switch (context.status) {
+    case "accepted":
+      return {
+        title: "Volunteer Found",
+        message: `A volunteer has accepted your ${context.activityType} request.`,
+      };
+    case "scheduled":
+      return {
+        title: "Visit Scheduled",
+        message: `Your visit has been scheduled for ${whenLabel(context.preferredDate, context.preferredTime)}.`,
+      };
+    case "in_progress":
+      return {
+        title: "Visit Started",
+        message: "Your companionship visit is now in progress.",
+      };
+    case "completed":
+      return {
+        title: "Visit Completed",
+        message: "Your companionship visit has been completed.",
+      };
+    case "cancelled":
+      return {
+        title: "Request Cancelled",
+        message: `Your ${context.activityType} request has been cancelled.`,
+      };
+  }
+}

@@ -1,4 +1,4 @@
-import { buildAcceptanceMessage, type AcceptanceNotificationContext } from '../types/notification';
+import { buildAcceptanceMessage, buildStatusNotificationContent, notificationTypeForStatus, type AcceptanceNotificationContext } from '../types/notification';
 
 const context: AcceptanceNotificationContext = {
   elderlyId: 'elderly-1',
@@ -28,5 +28,22 @@ describe('buildAcceptanceMessage', () => {
 
   it('omits the verified marker for an unverified volunteer', () => {
     expect(buildAcceptanceMessage({ ...context, volunteerVerified: false }, 'elderly')).not.toContain('verified volunteer');
+  });
+});
+
+describe('request status notification content', () => {
+  const base = { elderlyId: 'elderly-1', requestId: 'request-1', activityType: 'Friendly Conversation', preferredDate: new Date(2026, 7, 25), preferredTime: '3:00 PM' };
+
+  it.each([
+    ['scheduled', 'request_scheduled', 'Visit Scheduled'],
+    ['in_progress', 'request_started', 'Visit Started'],
+    ['completed', 'request_completed', 'Visit Completed'],
+    ['cancelled', 'request_cancelled', 'Request Cancelled'],
+  ] as const)('maps %s without exposing the raw status', (status, type, title) => {
+    expect(notificationTypeForStatus(status)).toBe(type);
+    const content = buildStatusNotificationContent({ ...base, status });
+    expect(content.title).toBe(title);
+    expect(content.message).not.toBe(status);
+    expect(content.message).not.toContain('_');
   });
 });
