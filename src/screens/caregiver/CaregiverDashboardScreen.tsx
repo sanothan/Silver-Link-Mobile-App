@@ -278,6 +278,13 @@ export default function CaregiverDashboardScreen() {
     );
   };
 
+  const handleViewRequests = (elderlyUserId: string) => {
+    router.push({
+      pathname: "caregiver-elderly-requests" as any,
+      params: { elderlyUserId },
+    });
+  };
+
   const handlePlaceholderAction = (title: string) => {
     Alert.alert(
       title,
@@ -420,27 +427,48 @@ export default function CaregiverDashboardScreen() {
                           </View>
                         </View>
                       </View>
-                      {isPending && (
-                        <Pressable
-                          accessibilityRole="button"
-                          disabled={cancelling === link.id}
-                          onPress={() =>
-                            handleCancelRequest(link.id, link.elderlyName)
-                          }
-                          style={styles.inlineAction}
-                        >
-                          <Text
+                      <View style={styles.linkActionRow}>
+                        {isPending ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={cancelling === link.id}
+                            onPress={() =>
+                              handleCancelRequest(link.id, link.elderlyName)
+                            }
                             style={[
-                              styles.inlineActionText,
-                              cancelling === link.id && { opacity: 0.5 },
+                              styles.inlineAction,
+                              styles.inlineActionDanger,
                             ]}
                           >
-                            {cancelling === link.id
-                              ? "Cancelling..."
-                              : "Cancel"}
-                          </Text>
-                        </Pressable>
-                      )}
+                            <Text
+                              style={[
+                                styles.inlineActionText,
+                                styles.inlineActionTextDanger,
+                                cancelling === link.id && { opacity: 0.5 },
+                              ]}
+                            >
+                              {cancelling === link.id
+                                ? "Cancelling..."
+                                : "Cancel"}
+                            </Text>
+                          </Pressable>
+                        ) : (
+                          <>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() =>
+                                handleViewRequests(link.elderlyUserId)
+                              }
+                              style={styles.inlineAction}
+                            >
+                              <Text style={styles.inlineActionText}>
+                                View Requests
+                              </Text>
+                              <Text style={styles.inlineActionArrow}>→</Text>
+                            </Pressable>
+                          </>
+                        )}
+                      </View>
                     </View>
                   );
                 })}
@@ -1071,5 +1099,17 @@ const styles = StyleSheet.create({
   },
   statusAcceptedText: {
     color: colors.success,
+  },
+  linkActionRow: {
+    gap: 10,
+  },
+  inlineActionDanger: {
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    paddingTop: 12,
+    marginTop: 12,
+  },
+  inlineActionTextDanger: {
+    color: colors.error,
   },
 });

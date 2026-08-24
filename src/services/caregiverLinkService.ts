@@ -278,3 +278,25 @@ export async function cancelCaregiverLinkRequest(
     updatedAt: serverTimestamp(),
   });
 }
+
+/**
+ * Check if a caregiver has an accepted link with an elderly user.
+ * Used to verify access before showing requests or other sensitive data.
+ */
+export async function hasAcceptedCaregiverLink(
+  caregiverId: string,
+  elderlyUserId: string,
+): Promise<boolean> {
+  const dbRef = requireDb();
+
+  const linksSnapshot = await getDocs(
+    query(
+      collection(dbRef, "caregiverLinks"),
+      where("caregiverId", "==", caregiverId),
+      where("elderlyUserId", "==", elderlyUserId),
+      where("status", "==", "accepted"),
+    ),
+  );
+
+  return linksSnapshot.size > 0;
+}
