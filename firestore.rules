@@ -59,6 +59,16 @@ service cloud.firestore {
           .hasOnly(['status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified', 'volunteerPhotoUrl', 'volunteerBio', 'volunteerExperience', 'volunteerRating', 'acceptedAt', 'updatedAt']);
     }
 
+    function isVolunteerProgressUpdate() {
+      return isRole('volunteer') &&
+        resource.data.assignedVolunteerId == request.auth.uid &&
+        request.resource.data.assignedVolunteerId == request.auth.uid &&
+        ((resource.data.status == 'scheduled' && request.resource.data.status == 'in_progress' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt', 'updatedAt'])) ||
+         (resource.data.status == 'in_progress' && request.resource.data.status == 'completed' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'updatedAt'])));
+    }
+
     // Only elderly/volunteer/caregiver may self-register; admin is console-only
     // (set manually in the Firebase console, never through a client write).
     function isSelfRegistration(uid) {
@@ -142,7 +152,7 @@ service cloud.firestore {
             request.resource.data.status == 'cancelled' &&
             request.resource.data.cancelledBy == request.auth.uid &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledBy', 'updatedAt'])))) ||
-        isVolunteerAcceptance();
+        isVolunteerAcceptance() || isVolunteerProgressUpdate();
       // Preserve workflow history; only admins may hard-delete requests.
       allow delete: if isAdmin();
     }
@@ -169,8 +179,13 @@ service cloud.firestore {
       allow create: if isRole('volunteer') &&
         request.resource.data.volunteerId == request.auth.uid &&
         request.resource.data.requestId == assignmentId;
-      allow update, delete: if isAdmin() ||
-        resource.data.volunteerId == request.auth.uid ||
+      allow update: if isAdmin() ||
+        (isRole('volunteer') && resource.data.volunteerId == request.auth.uid &&
+          request.resource.data.volunteerId == resource.data.volunteerId &&
+          exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
+          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.status == request.resource.data.status &&
+          ((request.resource.data.status == 'in_progress' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt', 'updatedAt'])) ||
+           (request.resource.data.status == 'completed' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'updatedAt'])))) ||
         // The elderly owner cancelling their request must be able to mark the
         // matching assignment cancelled too, so a volunteer's or admin's
         // dashboard stops showing it as an active activity. Limited to
@@ -181,22 +196,35 @@ service cloud.firestore {
           get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.status == request.resource.data.status &&
           request.resource.data.status in ['cancelled', 'scheduled'] &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt']));
+      allow delete: if isAdmin();
     }
 
     // ---- notifications ----
     match /notifications/{notificationId} {
       allow read: if isAdmin() || resource.data.userId == request.auth.uid;
-      // A volunteer accepting a request must be able to notify the elderly
-      // owner and their linked caregiver, so the notification is written for
-      // someone else — but only as an unread acceptance notice stamped with
-      // the volunteer's own uid.
-      allow create: if hasPlatformAccess() &&
-        (request.resource.data.userId == request.auth.uid ||
-          (isRole('volunteer') &&
-            request.resource.data.type == 'request_accepted' &&
-            request.resource.data.volunteerId == request.auth.uid &&
-            request.resource.data.read == false));
-      allow update, delete: if isAdmin() || resource.data.userId == request.auth.uid;
+      // Status alerts must point to a real request in the matching stored
+      // state. Elders can create their own scheduled/cancelled alert; assigned
+      // volunteers can create accepted/started/completed alerts for the owner
+      // (and the linked caregiver for acceptance only).
+      allow create: if hasPlatformAccess() && request.resource.data.read == false &&
+        request.resource.data.requestId is string &&
+        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
+        ((request.resource.data.userId == request.auth.uid &&
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid &&
+          ((request.resource.data.type == 'request_scheduled' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'scheduled') ||
+           (request.resource.data.type == 'request_cancelled' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'cancelled'))) ||
+         (isRole('volunteer') && request.resource.data.volunteerId == request.auth.uid &&
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid &&
+          (request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy ||
+           (request.resource.data.type == 'request_accepted' && request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null))) &&
+          ((request.resource.data.type == 'request_accepted' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'accepted') ||
+           (request.resource.data.type == 'request_started' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'in_progress') ||
+           (request.resource.data.type == 'request_completed' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed'))));
+      allow update: if isAdmin() ||
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId &&
+          request.resource.data.read == true &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
+      allow delete: if isAdmin();
     }
 
     // ---- complaints & safety reports ----
