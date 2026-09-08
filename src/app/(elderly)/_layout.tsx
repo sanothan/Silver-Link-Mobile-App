@@ -1,15 +1,18 @@
-import { Tabs } from "expo-router";
-import { StyleSheet, Text } from "react-native";
-import { colors } from "../../theme/colors";
+import { Tabs } from 'expo-router';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { colors } from '../../theme/colors';
 
-const icons = {
-  index: "⌂",
-  request: "+",
-  visits: "▣",
-  notifications: "✉",
-  alerts: "!",
-  profile: "○",
-} as const;
+import type { ColorValue } from 'react-native';
+
+type TabIconProps = { emoji: string; color: ColorValue; focused: boolean };
+
+function TabIcon({ emoji, color, focused }: TabIconProps) {
+  return (
+    <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+      <Text style={[styles.icon, { color }]}>{emoji}</Text>
+    </View>
+  );
+}
 
 export default function ElderlyTabLayout() {
   return (
@@ -17,7 +20,7 @@ export default function ElderlyTabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: styles.label,
         tabBarStyle: styles.bar,
         tabBarItemStyle: styles.item,
@@ -26,29 +29,29 @@ export default function ElderlyTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.icon, { color }]}>{icons.index}</Text>
+          title: 'Home',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon emoji="⌂" color={color} focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
         name="request"
         options={{
-          title: "Request",
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.requestIcon, { backgroundColor: color }]}>
-              +
-            </Text>
+          title: 'Request',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.requestBubble, { backgroundColor: focused ? colors.primary : colors.textMuted }]}>
+              <Text style={styles.requestPlus}>+</Text>
+            </View>
           ),
         }}
       />
       <Tabs.Screen
         name="visits"
         options={{
-          title: "Visits",
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.icon, { color }]}>{icons.visits}</Text>
+          title: 'Visits',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon emoji="▣" color={color} focused={focused} />
           ),
         }}
       />
@@ -56,18 +59,18 @@ export default function ElderlyTabLayout() {
       <Tabs.Screen
         name="alerts"
         options={{
-          title: "Alerts",
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.icon, { color }]}>{icons.alerts}</Text>
+          title: 'Alerts',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon emoji="✉" color={color} focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.icon, { color }]}>{icons.profile}</Text>
+          title: 'Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon emoji="○" color={color} focused={focused} />
           ),
         }}
       />
@@ -83,24 +86,51 @@ export default function ElderlyTabLayout() {
 
 const styles = StyleSheet.create({
   bar: {
-    height: 76,
-    paddingTop: 7,
-    paddingBottom: 9,
+    height: Platform.OS === 'ios' ? 84 : 72,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 22 : 10,
     backgroundColor: colors.surface,
+    borderTopWidth: 1,
     borderTopColor: colors.border,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  item: { minHeight: 58 },
-  label: { fontSize: 13, lineHeight: 17, fontWeight: "700" },
-  icon: { fontSize: 24, lineHeight: 27, fontWeight: "800" },
-  requestIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    overflow: "hidden",
+  item: { minHeight: 56, paddingTop: 4 },
+  label: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrapActive: {
+    backgroundColor: colors.primaryLight,
+  },
+  icon: {
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '800',
+  },
+  requestBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestPlus: {
     color: colors.textOnPrimary,
-    fontSize: 24,
-    lineHeight: 30,
-    textAlign: "center",
-    fontWeight: "700",
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '800',
   },
 });
