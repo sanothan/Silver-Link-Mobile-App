@@ -210,6 +210,7 @@ export async function getOpenRequests(
   );
   return snapshot.docs
     .map(fromSnapshot)
+    .filter((request) => !request.assignedVolunteerId)
     .sort((a, b) => a.preferredDate.getTime() - b.preferredDate.getTime());
 }
 
