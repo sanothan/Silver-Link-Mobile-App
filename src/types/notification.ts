@@ -8,7 +8,9 @@ export type NotificationType =
   | "request_cancelled"
   | "caregiver_link_request"
   | "caregiver_link_accepted"
-  | "caregiver_link_rejected";
+  | "caregiver_link_rejected"
+  | "volunteer_verification_approved"
+  | "volunteer_verification_rejected";
 export type NotificationAudience = "elderly" | "caregiver" | "volunteer";
 
 export interface AppNotification {
@@ -40,6 +42,27 @@ export interface CaregiverLinkDecisionNotificationContext {
   elderlyUserId: string;
   elderlyName: string;
   decision: "accepted" | "rejected";
+}
+
+export interface VolunteerVerificationNotificationContext {
+  volunteerId: string;
+  volunteerName?: string;
+  decision: "approved" | "rejected";
+  note?: string;
+}
+
+export const VOLUNTEER_VERIFICATION_APPROVED_TITLE = "Verification Approved";
+export const VOLUNTEER_VERIFICATION_REJECTED_TITLE = "Verification Not Approved";
+
+export function buildVolunteerVerificationMessage(
+  context: VolunteerVerificationNotificationContext,
+): string {
+  const reason = context.note?.trim() ? ` Reason: ${context.note.trim()}` : "";
+  return context.decision === "approved"
+    ? "An administrator has verified your volunteer profile. You can now accept companionship requests." +
+        reason
+    : "An administrator reviewed your volunteer profile and could not approve it at this time." +
+        reason;
 }
 
 export interface AcceptanceNotificationContext {
