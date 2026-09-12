@@ -5,7 +5,10 @@ export type NotificationType =
   | "request_scheduled"
   | "request_started"
   | "request_completed"
-  | "request_cancelled";
+  | "request_cancelled"
+  | "caregiver_link_request"
+  | "caregiver_link_accepted"
+  | "caregiver_link_rejected";
 export type NotificationAudience = "elderly" | "caregiver" | "volunteer";
 
 export interface AppNotification {
@@ -16,11 +19,27 @@ export interface AppNotification {
   title: string;
   message: string;
   requestId?: string;
+  linkId?: string;
   volunteerId?: string;
   volunteerName?: string;
   volunteerVerified?: boolean;
   read: boolean;
   createdAt?: Date;
+}
+
+export interface CaregiverLinkRequestNotificationContext {
+  linkId: string;
+  caregiverId: string;
+  caregiverName: string;
+  elderlyUserId: string;
+}
+
+export interface CaregiverLinkDecisionNotificationContext {
+  linkId: string;
+  caregiverId: string;
+  elderlyUserId: string;
+  elderlyName: string;
+  decision: "accepted" | "rejected";
 }
 
 export interface AcceptanceNotificationContext {
@@ -45,6 +64,18 @@ export interface StatusNotificationContext {
   preferredDate: Date;
   preferredTime: string;
   volunteerId?: string;
+}
+
+export interface ScheduleConfirmationContext {
+  elderlyId: string;
+  elderlyName?: string;
+  caregiverId?: string;
+  requestId: string;
+  activityType: string;
+  preferredDate: Date;
+  preferredTime: string;
+  volunteerId: string;
+  volunteerName: string;
 }
 
 function whenLabel(date: Date, time: string): string {
@@ -75,6 +106,23 @@ export function buildAcceptanceMessage(
 export const ACCEPTANCE_NOTIFICATION_TITLE = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER = "Request Accepted";
+export const SCHEDULE_CONFIRMATION_TITLE = "Visit Scheduled";
+
+export function buildScheduleConfirmationMessage(
+  context: ScheduleConfirmationContext,
+  audience: NotificationAudience,
+): string {
+  const when = whenLabel(context.preferredDate, context.preferredTime);
+  if (audience === "caregiver") {
+    const who = context.elderlyName
+      ? `${context.elderlyName}'s`
+      : "Your linked family member’s";
+    return `${who} ${context.activityType} visit with ${context.volunteerName} has been scheduled for ${when}.`;
+  }
+  if (audience === "volunteer")
+    return `Your ${context.activityType} visit is confirmed for ${when}.`;
+  return `Your visit with ${context.volunteerName} has been scheduled for ${when}.`;
+}
 
 export function notificationTypeForStatus(
   status: NotifiableRequestStatus,

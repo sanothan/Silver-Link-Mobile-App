@@ -1,5 +1,5 @@
-import { type Href, useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -7,23 +7,44 @@ import {
   StyleSheet,
   Text,
   View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../../context/AuthContext";
-import { getElderlyRequests } from "../../services/requestService";
-import { colors } from "../../theme/colors";
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
+import { getElderlyRequests } from '../../services/requestService';
+import { colors } from '../../theme/colors';
 import {
   REQUEST_STATUS_LABELS,
   type CompanionshipRequest,
-} from "../../types/request";
-type Filter = "active" | "completed" | "cancelled";
+} from '../../types/request';
+
+type Filter = 'active' | 'completed' | 'cancelled';
+
+const FILTER_LABELS: Record<Filter, string> = {
+  active: 'Active',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+function statusStyle(status: string): { bg: string; text: string } {
+  switch (status) {
+    case 'pending': return { bg: colors.warningLight, text: '#92400E' };
+    case 'accepted': return { bg: colors.infoLight, text: '#075985' };
+    case 'scheduled': return { bg: '#EDE9FE', text: '#5B21B6' };
+    case 'started': return { bg: '#DCFCE7', text: '#166534' };
+    case 'completed': return { bg: colors.successLight, text: '#166534' };
+    case 'cancelled': return { bg: colors.errorLight, text: '#991B1B' };
+    default: return { bg: colors.surfaceSoft, text: colors.textSecondary };
+  }
+}
+
 export default function MyRequests() {
   const { user } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<CompanionshipRequest[]>([]);
-  const [filter, setFilter] = useState<Filter>("active");
+  const [filter, setFilter] = useState<Filter>('active');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -36,40 +57,46 @@ export default function MyRequests() {
       setLoading(false);
     }
   }, [user]);
+
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load]),
   );
+
   const filtered = useMemo(
     () =>
       items.filter((item) =>
-        filter === "active"
-          ? !["completed", "cancelled"].includes(item.status)
+        filter === 'active'
+          ? !['completed', 'cancelled'].includes(item.status)
           : item.status === filter,
       ),
     [filter, items],
   );
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>My Requests</Text>
         <Pressable
           accessibilityRole="button"
           style={styles.newButton}
-          onPress={() => router.push("/(elderly)/request")}
+          onPress={() => router.push('/(elderly)/request')}
         >
           <Text style={styles.newText}>+ New</Text>
         </Pressable>
       </View>
-      <View style={styles.filters}>
-        {(["active", "completed", "cancelled"] as Filter[]).map((value) => (
+
+      {/* Filter tabs */}
+      <View style={styles.filterRow}>
+        {(['active', 'completed', 'cancelled'] as Filter[]).map((value) => (
           <Pressable
             key={value}
             accessibilityRole="tab"
             accessibilityState={{ selected: filter === value }}
             onPress={() => setFilter(value)}
-            style={[styles.filter, filter === value && styles.filterActive]}
+            style={[styles.filterTab, filter === value && styles.filterTabActive]}
           >
             <Text
               style={[
@@ -77,63 +104,94 @@ export default function MyRequests() {
                 filter === value && styles.filterTextActive,
               ]}
             >
-              {value[0].toUpperCase() + value.slice(1)}
+              {FILTER_LABELS[value]}
             </Text>
           </Pressable>
         ))}
       </View>
+
+      {/* Content */}
       {loading ? (
         <Center>
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.emptyText}>Loading…</Text>
         </Center>
       ) : error ? (
         <Center>
           <Text style={styles.emptyTitle}>
             We couldn&apos;t load your requests.
           </Text>
-          <Pressable style={styles.retry} onPress={() => void load()}>
+          <Pressable style={styles.retryButton} onPress={() => void load()}>
             <Text style={styles.retryText}>Try Again</Text>
           </Pressable>
         </Center>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {filtered.length ? (
-            filtered.map((item) => (
-              <Pressable
-                key={item.id}
-                accessibilityRole="button"
-                style={styles.card}
-                onPress={() =>
-                  router.push(`/(elderly)/request-details/${item.id}` as Href)
-                }
-              >
-                <Text style={styles.cardTitle}>{item.activityType}</Text>
-                <Text style={styles.meta}>
-                  {item.preferredDate.toLocaleDateString()} •{" "}
-                  {item.preferredTime}
-                </Text>
-                <Text style={styles.status}>
-                  {REQUEST_STATUS_LABELS[item.status]}
-                </Text>
-                {item.volunteerName ? (
-                  <Text style={styles.volunteer}>
-                    {item.volunteerName}
-                    {item.volunteerVerified ? "  ✓ Verified" : ""}
+            filtered.map((item) => {
+              const sc = statusStyle(item.status);
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  style={styles.card}
+                  onPress={() =>
+                    router.push(`/(elderly)/request-details/${item.id}` as Href)
+                  }
+                >
+                  {/* Activity name */}
+                  <Text style={styles.cardTitle}>{item.activityType}</Text>
+
+                  {/* Date/time */}
+                  <Text style={styles.meta}>
+                    {item.preferredDate.toLocaleDateString()} •{' '}
+                    {item.preferredTime}
                   </Text>
-                ) : null}
-                <Text style={styles.link}>View Details →</Text>
-              </Pressable>
-            ))
+
+                  {/* Status chip */}
+                  <View style={[styles.statusChip, { backgroundColor: sc.bg }]}>
+                    <Text style={[styles.statusChipText, { color: sc.text }]}>
+                      {REQUEST_STATUS_LABELS[item.status]}
+                    </Text>
+                  </View>
+
+                  {/* Volunteer */}
+                  {item.volunteerName ? (
+                    <View style={styles.volunteerRow}>
+                      <View style={styles.volunteerDot} />
+                      <Text style={styles.volunteer}>
+                        {item.volunteerName}
+                        {item.volunteerVerified ? '  ✓' : ''}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Link */}
+                  <Text style={styles.link}>View Details →</Text>
+                </Pressable>
+              );
+            })
           ) : (
             <Center>
-              <Text style={styles.emptyTitle}>No requests here</Text>
-              <Text style={styles.emptyText}>Need companionship or help?</Text>
-              <Pressable
-                style={styles.retry}
-                onPress={() => router.push("/(elderly)/request")}
-              >
-                <Text style={styles.retryText}>Request Help</Text>
-              </Pressable>
+              <View style={styles.emptyIcon}>
+                <Text style={styles.emptyIconText}>
+                  {filter === 'completed' ? '✓' : filter === 'cancelled' ? '×' : '♡'}
+                </Text>
+              </View>
+              <Text style={styles.emptyTitle}>No {filter} requests</Text>
+              <Text style={styles.emptyText}>
+                {filter === 'active'
+                  ? 'Need companionship or help?'
+                  : `Your ${filter} requests will appear here.`}
+              </Text>
+              {filter === 'active' ? (
+                <Pressable
+                  style={styles.retryButton}
+                  onPress={() => router.push('/(elderly)/request')}
+                >
+                  <Text style={styles.retryText}>Request Help</Text>
+                </Pressable>
+              ) : null}
             </Center>
           )}
         </ScrollView>
@@ -141,93 +199,142 @@ export default function MyRequests() {
     </SafeAreaView>
   );
 }
+
 function Center({ children }: { children: React.ReactNode }) {
   return <View style={styles.center}>{children}</View>;
 }
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+
+  /* Header */
   header: {
     paddingHorizontal: 20,
-    paddingTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    paddingTop: 16,
+    paddingBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  title: { color: colors.textPrimary, fontSize: 28, fontWeight: "800" },
+  title: { color: colors.textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.4 },
   newButton: {
-    minHeight: 48,
-    paddingHorizontal: 17,
-    borderRadius: 13,
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     backgroundColor: colors.primary,
-    justifyContent: "center",
+    justifyContent: 'center',
+    shadowColor: '#3730A3',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  newText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: "800" },
-  filters: { flexDirection: "row", gap: 8, padding: 20 },
-  filter: {
+  newText: { color: colors.textOnPrimary, fontSize: 15, fontWeight: '800' },
+
+  /* Filters */
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  filterTab: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 12,
+    minHeight: 44,
+    borderRadius: 13,
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  filterActive: {
+  filterTabActive: {
     backgroundColor: colors.primaryLight,
     borderColor: colors.primary,
+    borderWidth: 2,
   },
-  filterText: { color: colors.textSecondary, fontSize: 14, fontWeight: "700" },
-  filterTextActive: { color: colors.primaryDark },
-  list: { paddingHorizontal: 20, paddingBottom: 35, gap: 12, flexGrow: 1 },
+  filterText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  filterTextActive: { color: colors.primaryDark, fontWeight: '800' },
+
+  /* List */
+  list: { paddingHorizontal: 20, paddingBottom: 40, gap: 12, flexGrow: 1 },
+
+  /* Card */
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 18,
+    padding: 20,
+    gap: 8,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  cardTitle: { color: colors.textPrimary, fontSize: 19, fontWeight: "800" },
-  meta: { color: colors.textSecondary, fontSize: 16, marginTop: 7 },
-  status: {
-    color: colors.primaryDark,
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 12,
+  cardTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '800' },
+  meta: { color: colors.textSecondary, fontSize: 15 },
+
+  /* Status chip */
+  statusChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
-  volunteer: {
-    color: colors.success,
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 7,
+  statusChipText: { fontSize: 13, fontWeight: '800' },
+
+  /* Volunteer */
+  volunteerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  volunteerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.success,
   },
-  link: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: "800",
-    marginTop: 15,
-  },
+  volunteer: { color: colors.success, fontSize: 14, fontWeight: '700' },
+
+  /* Link */
+  link: { color: colors.primary, fontSize: 15, fontWeight: '800', marginTop: 4 },
+
+  /* Center / Empty */
   center: {
     flex: 1,
-    minHeight: 260,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
+    minHeight: 280,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 28,
+    gap: 12,
   },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyIconText: { fontSize: 34, color: colors.primary },
   emptyTitle: {
     color: colors.textPrimary,
     fontSize: 20,
-    fontWeight: "800",
-    textAlign: "center",
+    fontWeight: '800',
+    textAlign: 'center',
   },
-  emptyText: { color: colors.textSecondary, fontSize: 16, marginTop: 7 },
-  retry: {
+  emptyText: { color: colors.textSecondary, fontSize: 15, textAlign: 'center' },
+  retryButton: {
     minHeight: 52,
-    borderRadius: 13,
+    borderRadius: 14,
     backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    justifyContent: "center",
-    marginTop: 16,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    shadowColor: '#3730A3',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  retryText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: "800" },
+  retryText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '800' },
 });

@@ -21,6 +21,7 @@ import type {
 import { db } from "./firebaseConfig";
 import {
     createAcceptanceNotifications,
+    createScheduleConfirmationNotifications,
     createStatusNotification,
 } from "./notificationService";
 import { getUserProfile } from "./userService";
@@ -394,14 +395,16 @@ export async function confirmAssignedVolunteer(
       cause,
     ),
   );
-  await createStatusNotification({
+  await createScheduleConfirmationNotifications({
     elderlyId: current.createdBy,
+    elderlyName: current.createdByName,
+    caregiverId: current.caregiverId,
     requestId,
     activityType: current.activityType,
-    status: "scheduled",
     preferredDate: current.preferredDate,
     preferredTime: current.preferredTime,
     volunteerId: current.assignedVolunteerId,
+    volunteerName: current.volunteerName ?? "your volunteer",
   }).catch((cause) =>
     console.warn(
       "[requests] Request scheduled but its notification could not be stored.",

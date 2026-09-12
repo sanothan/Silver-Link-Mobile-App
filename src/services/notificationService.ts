@@ -17,13 +17,18 @@ import {
   ACCEPTANCE_NOTIFICATION_TITLE,
   ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER,
   ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER,
+  SCHEDULE_CONFIRMATION_TITLE,
   buildAcceptanceMessage,
+  buildScheduleConfirmationMessage,
   buildStatusNotificationContent,
   notificationTypeForStatus,
   type AcceptanceNotificationContext,
   type AppNotification,
+  type CaregiverLinkDecisionNotificationContext,
+  type CaregiverLinkRequestNotificationContext,
   type NotificationAudience,
   type NotificationType,
+  type ScheduleConfirmationContext,
   type StatusNotificationContext,
 } from "../types/notification";
 
@@ -48,6 +53,9 @@ const TYPES: NotificationType[] = [
   "request_started",
   "request_completed",
   "request_cancelled",
+  "caregiver_link_request",
+  "caregiver_link_accepted",
+  "caregiver_link_rejected",
 ];
 
 function fromSnapshot(snapshot: {
@@ -69,12 +77,62 @@ function fromSnapshot(snapshot: {
     title: asText(data.title) ?? ACCEPTANCE_NOTIFICATION_TITLE,
     message: asText(data.message) ?? "",
     requestId: asText(data.requestId),
+    linkId: asText(data.linkId),
     volunteerId: asText(data.volunteerId),
     volunteerName: asText(data.volunteerName),
     volunteerVerified: data.volunteerVerified === true,
     read: data.read === true,
     createdAt: asDate(data.createdAt),
   };
+}
+
+function caregiverLinkNotificationId(linkId: string, type: NotificationType, userId: string) {
+  return `${linkId}_${type}_${userId}`;
+}
+
+export async function createCaregiverLinkRequestNotification(
+  context: CaregiverLinkRequestNotificationContext,
+) {
+  const database = requireDb();
+  const type = "caregiver_link_request" as const;
+  await setDoc(
+    doc(database, "notifications", caregiverLinkNotificationId(context.linkId, type, context.elderlyUserId)),
+    {
+      userId: context.elderlyUserId,
+      audience: "elderly",
+      type,
+      title: "Caregiver Connection Request",
+      message: `${context.caregiverName} would like to connect with you as a caregiver.`,
+      linkId: context.linkId,
+      caregiverId: context.caregiverId,
+      read: false,
+      createdAt: serverTimestamp(),
+    },
+  );
+}
+
+export async function createCaregiverLinkDecisionNotification(
+  context: CaregiverLinkDecisionNotificationContext,
+) {
+  const database = requireDb();
+  const accepted = context.decision === "accepted";
+  const type = accepted ? "caregiver_link_accepted" : "caregiver_link_rejected";
+  await setDoc(
+    doc(database, "notifications", caregiverLinkNotificationId(context.linkId, type, context.caregiverId)),
+    {
+      userId: context.caregiverId,
+      audience: "caregiver",
+      type,
+      title: accepted ? "Connection Accepted" : "Connection Request Declined",
+      message: accepted
+        ? `${context.elderlyName} accepted your caregiver connection request.`
+        : "Your caregiver connection request was declined.",
+      linkId: context.linkId,
+      elderlyUserId: context.elderlyUserId,
+      read: false,
+      createdAt: serverTimestamp(),
+    },
+  );
 }
 
 function notificationId(
@@ -146,6 +204,69 @@ export async function createAcceptanceNotifications(
         ),
       ),
       acceptancePayload(context, context.caregiverId, "caregiver"),
+    );
+  await batch.commit();
+}
+
+function scheduleConfirmationPayload(
+  context: ScheduleConfirmationContext,
+  userId: string,
+  audience: NotificationAudience,
+) {
+  return {
+    userId,
+    audience,
+    type: "request_scheduled" as const,
+    title: SCHEDULE_CONFIRMATION_TITLE,
+    message: buildScheduleConfirmationMessage(context, audience),
+    requestId: context.requestId,
+    volunteerId: context.volunteerId,
+    volunteerName: context.volunteerName,
+    read: false,
+    createdAt: serverTimestamp(),
+  };
+}
+
+/**
+ * Fires once the elderly user confirms the volunteer's schedule. Notifies the
+ * elderly user, the volunteer, and the linked caregiver (if any) that the
+ * date and time are locked in — deterministic IDs keep retries idempotent.
+ */
+export async function createScheduleConfirmationNotifications(
+  context: ScheduleConfirmationContext,
+) {
+  const database = requireDb();
+  const batch = writeBatch(database);
+  const type = "request_scheduled" as const;
+  batch.set(
+    doc(
+      database,
+      "notifications",
+      notificationId(context.requestId, type, "elderly", context.elderlyId),
+    ),
+    scheduleConfirmationPayload(context, context.elderlyId, "elderly"),
+  );
+  batch.set(
+    doc(
+      database,
+      "notifications",
+      notificationId(context.requestId, type, "volunteer", context.volunteerId),
+    ),
+    scheduleConfirmationPayload(context, context.volunteerId, "volunteer"),
+  );
+  if (context.caregiverId && context.caregiverId !== context.elderlyId)
+    batch.set(
+      doc(
+        database,
+        "notifications",
+        notificationId(
+          context.requestId,
+          type,
+          "caregiver",
+          context.caregiverId,
+        ),
+      ),
+      scheduleConfirmationPayload(context, context.caregiverId, "caregiver"),
     );
   await batch.commit();
 }
