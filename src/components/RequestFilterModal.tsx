@@ -15,6 +15,7 @@ export interface RequestFilters {
   dateFilter: DateFilter;
   customDate: string;
   durationLabel: string | null;
+  availabilityMatch: boolean;
 }
 
 export const EMPTY_FILTERS: RequestFilters = {
@@ -23,6 +24,7 @@ export const EMPTY_FILTERS: RequestFilters = {
   dateFilter: "any",
   customDate: "",
   durationLabel: null,
+  availabilityMatch: false,
 };
 
 export function countActiveFilters(filters: RequestFilters): number {
@@ -31,6 +33,7 @@ export function countActiveFilters(filters: RequestFilters): number {
   if (filters.location.trim()) count += 1;
   if (filters.dateFilter !== "any") count += 1;
   if (filters.durationLabel) count += 1;
+  if (filters.availabilityMatch) count += 1;
   return count;
 }
 
@@ -56,7 +59,9 @@ function isWithinNextDays(date: Date, from: Date, days: number): boolean {
 export function matchesFilters(
   item: CompanionshipRequest,
   filters: RequestFilters,
+  matchingRequestIds: ReadonlySet<string> = new Set(),
 ): boolean {
+  if (filters.availabilityMatch && !matchingRequestIds.has(item.id)) return false;
   if (
     filters.activityTypes.length &&
     !filters.activityTypes.includes(item.activityType)
@@ -267,6 +272,19 @@ export function RequestFilterModal({
                 );
               })}
             </View>
+
+            <Text style={styles.label}>Availability</Text>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: draft.availabilityMatch }}
+              accessibilityLabel={`Matches my availability${draft.availabilityMatch ? ', selected' : ''}`}
+              style={[styles.chip, draft.availabilityMatch && styles.chipActive]}
+              onPress={() => setDraft((current) => ({ ...current, availabilityMatch: !current.availabilityMatch }))}
+            >
+              <Text style={[styles.chipText, draft.availabilityMatch && styles.chipTextActive]}>
+                {draft.availabilityMatch ? '✓ ' : ''}Matches My Availability
+              </Text>
+            </Pressable>
           </ScrollView>
           <View style={styles.footer}>
             <Pressable
