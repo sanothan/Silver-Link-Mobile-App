@@ -5,7 +5,10 @@ export type NotificationType =
   | "request_scheduled"
   | "request_started"
   | "request_completed"
-  | "request_cancelled";
+  | "request_cancelled"
+  | "caregiver_link_request"
+  | "caregiver_link_accepted"
+  | "caregiver_link_rejected";
 export type NotificationAudience = "elderly" | "caregiver" | "volunteer";
 
 export interface AppNotification {
@@ -16,11 +19,27 @@ export interface AppNotification {
   title: string;
   message: string;
   requestId?: string;
+  linkId?: string;
   volunteerId?: string;
   volunteerName?: string;
   volunteerVerified?: boolean;
   read: boolean;
   createdAt?: Date;
+}
+
+export interface CaregiverLinkRequestNotificationContext {
+  linkId: string;
+  caregiverId: string;
+  caregiverName: string;
+  elderlyUserId: string;
+}
+
+export interface CaregiverLinkDecisionNotificationContext {
+  linkId: string;
+  caregiverId: string;
+  elderlyUserId: string;
+  elderlyName: string;
+  decision: "accepted" | "rejected";
 }
 
 export interface AcceptanceNotificationContext {

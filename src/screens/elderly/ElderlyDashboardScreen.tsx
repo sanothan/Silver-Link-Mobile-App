@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 import { getElderlyRequests } from '../../services/requestService';
+import { getCaregiverLinksForElderly } from '../../services/caregiverLinkService';
 import {
   getNotifications,
   getUnreadNotificationCount,
@@ -24,6 +25,7 @@ import {
   type CompanionshipRequest,
 } from '../../types/request';
 import type { AppNotification } from '../../types/notification';
+import type { ElderlyCaregiverLinkDisplay } from '../../types/caregiver';
 import { formatRelativeTime } from '../../utils/time';
 
 interface UpcomingVisit {
@@ -127,6 +129,7 @@ export default function ElderlyDashboardScreen() {
   const [updatesLoading, setUpdatesLoading] = useState(true);
   const [updatesError, setUpdatesError] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [caregiverLinks, setCaregiverLinks] = useState<ElderlyCaregiverLinkDisplay[]>([]);
   const displayName = profile?.fullName || user?.displayName || '';
   const firstName = displayName.trim().split(/\s+/)[0];
   const requestHelp = () => router.push('/(elderly)/request');
@@ -137,11 +140,12 @@ export default function ElderlyDashboardScreen() {
     if (!user) return;
     setUpdatesLoading(true);
     setUpdatesError(false);
-    const [requestsResult, notificationsResult, countResult] =
+    const [requestsResult, notificationsResult, countResult, caregiverLinksResult] =
       await Promise.allSettled([
         getElderlyRequests(user.uid),
         getNotifications(user.uid, 3),
         getUnreadNotificationCount(user.uid),
+        getCaregiverLinksForElderly(user.uid),
       ]);
     if (requestsResult.status === 'fulfilled')
       setActiveRequest(
@@ -153,6 +157,7 @@ export default function ElderlyDashboardScreen() {
       setUpdates(notificationsResult.value);
     else setUpdatesError(true);
     if (countResult.status === 'fulfilled') setUnreadCount(countResult.value);
+    if (caregiverLinksResult.status === 'fulfilled') setCaregiverLinks(caregiverLinksResult.value);
     setUpdatesLoading(false);
   }, [user]);
 
@@ -189,6 +194,8 @@ export default function ElderlyDashboardScreen() {
     if (item.requestId)
       router.push(`/(elderly)/request-details/${item.requestId}` as Href);
   };
+  const connectedCaregiver = caregiverLinks.find((item) => item.status === 'accepted');
+  const pendingCaregiverCount = caregiverLinks.filter((item) => item.status === 'pending').length;
 
   // ── Loading / error states ──
   if (initializing)
@@ -466,18 +473,34 @@ export default function ElderlyDashboardScreen() {
         <View style={styles.section}>
           <SectionHeader title="Family / Caregiver" />
           <View style={[styles.card, styles.caregiverCard]}>
-            {profile?.caregiverId ? (
+            {profile?.caregiverId || connectedCaregiver ? (
               <>
-                <Text style={styles.emptyTitle}>Caregiver connected</Text>
+                <Text style={styles.emptyTitle}>
+                  {connectedCaregiver?.caregiverName || 'Caregiver connected'}
+                </Text>
                 <Text style={styles.bodyText}>
-                  A linked caregiver can receive important visit updates.
+                  Connected Caregiver · A linked caregiver can receive important visit updates.
                 </Text>
                 <Pressable
                   accessibilityRole="button"
                   style={styles.textButton}
-                  onPress={() => placeholder('Caregiver Details')}
+                  onPress={() => router.push('/(elderly)/caregiver-connections' as Href)}
                 >
                   <Text style={styles.textButtonText}>View Connection →</Text>
+                </Pressable>
+              </>
+            ) : pendingCaregiverCount ? (
+              <>
+                <Text style={styles.emptyTitle}>Caregiver connection request</Text>
+                <Text style={styles.bodyText}>
+                  You have {pendingCaregiverCount} request{pendingCaregiverCount === 1 ? '' : 's'} waiting for your response.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.outlineButton}
+                  onPress={() => router.push('/(elderly)/caregiver-connections' as Href)}
+                >
+                  <Text style={styles.outlineButtonText}>Review Request</Text>
                 </Pressable>
               </>
             ) : (
@@ -490,7 +513,7 @@ export default function ElderlyDashboardScreen() {
                 <Pressable
                   accessibilityRole="button"
                   style={styles.outlineButton}
-                  onPress={() => placeholder('Link Caregiver')}
+                  onPress={() => router.push('/(elderly)/caregiver-connections' as Href)}
                 >
                   <Text style={styles.outlineButtonText}>Link Caregiver</Text>
                 </Pressable>

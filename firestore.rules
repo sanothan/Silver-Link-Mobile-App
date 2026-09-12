@@ -89,7 +89,19 @@ service cloud.firestore {
         (isOwner(uid) &&
           request.resource.data.role == resource.data.role &&
           request.resource.data.status == resource.data.status &&
-          request.resource.data.uid == resource.data.uid);
+          request.resource.data.uid == resource.data.uid &&
+          (request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['fullName', 'phone', 'locality', 'preferredLanguage', 'photoUrl', 'updatedAt']) ||
+           (request.resource.data.caregiverId is string &&
+            (resource.data.get('caregiverId', null) == null ||
+             resource.data.caregiverId == request.resource.data.caregiverId) &&
+            request.resource.data.caregiverLinkId is string &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['caregiverId', 'caregiverLinkId', 'updatedAt']) &&
+            exists(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)) &&
+            getAfter(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)).data.status == 'accepted' &&
+            getAfter(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)).data.elderlyUserId == request.auth.uid &&
+            getAfter(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)).data.caregiverId == request.resource.data.caregiverId)));
       allow delete: if isAdmin();
     }
 
@@ -125,6 +137,51 @@ service cloud.firestore {
         request.resource.data.volunteerId == request.auth.uid;
       allow update, delete: if isAdmin() ||
         (isOwner(uid) && hasPlatformAccess() && resource.data.volunteerId == request.auth.uid);
+    }
+
+    // Minimal search directory. Caregivers can find an elderly member by an
+    // email they already know without gaining access to private users fields.
+    match /elderlyDirectory/{uid} {
+      allow read: if isOwner(uid) || isRole('caregiver') || isAdmin();
+      allow create: if isOwner(uid) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.role == 'elderly' &&
+        request.resource.data.keys().hasOnly(['uid', 'fullName', 'email', 'role', 'photoUrl', 'updatedAt']);
+      allow update: if isOwner(uid) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'photoUrl', 'updatedAt']);
+      allow delete: if isAdmin();
+    }
+
+    // ---- caregiver connection requests ----
+    match /caregiverLinks/{linkId} {
+      allow read: if isAdmin() ||
+        (hasPlatformAccess() &&
+          (resource.data.caregiverId == request.auth.uid ||
+           resource.data.elderlyUserId == request.auth.uid));
+      allow create: if isRole('caregiver') &&
+        request.resource.data.caregiverId == request.auth.uid &&
+        request.resource.data.elderlyUserId != request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.requestedBy == 'caregiver' &&
+        exists(/databases/$(database)/documents/users/$(request.resource.data.elderlyUserId)) &&
+        get(/databases/$(database)/documents/users/$(request.resource.data.elderlyUserId)).data.role == 'elderly';
+      allow update: if isAdmin() ||
+        (resource.data.status == 'pending' &&
+          request.resource.data.caregiverId == resource.data.caregiverId &&
+          request.resource.data.elderlyUserId == resource.data.elderlyUserId &&
+          request.resource.data.requestedBy == resource.data.requestedBy &&
+          ((isRole('elderly') && resource.data.elderlyUserId == request.auth.uid &&
+            ((request.resource.data.status == 'accepted' &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt', 'updatedAt'])) ||
+             (request.resource.data.status == 'rejected' &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rejectedAt', 'updatedAt'])))) ||
+           (isRole('caregiver') && resource.data.caregiverId == request.auth.uid &&
+            request.resource.data.status == 'cancelled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'updatedAt']))));
+      allow delete: if isAdmin();
     }
 
     // ---- companionship requests ----
@@ -231,6 +288,19 @@ service cloud.firestore {
           ((request.resource.data.type == 'request_accepted' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'accepted') ||
            (request.resource.data.type == 'request_started' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'in_progress') ||
            (request.resource.data.type == 'request_completed' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed'))));
+      allow create: if hasPlatformAccess() && request.resource.data.read == false &&
+        request.resource.data.linkId is string &&
+        exists(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)) &&
+        ((isRole('caregiver') &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.caregiverId == request.auth.uid &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.elderlyUserId == request.resource.data.userId &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'pending' &&
+          request.resource.data.type == 'caregiver_link_request') ||
+         (isRole('elderly') &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.elderlyUserId == request.auth.uid &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.caregiverId == request.resource.data.userId &&
+          ((get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'accepted' && request.resource.data.type == 'caregiver_link_accepted') ||
+           (get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'rejected' && request.resource.data.type == 'caregiver_link_rejected'))));
       allow update: if isAdmin() ||
         (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId &&
           request.resource.data.read == true &&

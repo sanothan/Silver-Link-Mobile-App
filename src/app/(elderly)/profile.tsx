@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,8 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { logoutUser } from '../../services/authService';
+import { getCaregiverLinksForElderly } from '../../services/caregiverLinkService';
 import { updateUserProfile } from '../../services/userService';
 import { colors } from '../../theme/colors';
+import type { ElderlyCaregiverLinkDisplay } from '../../types/caregiver';
 
 const ROLE_LABELS: Record<string, string> = {
   elderly: 'Elderly Member',
@@ -24,12 +27,21 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function Profile() {
   const { profile, user, retryProfile } = useAuth();
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState(profile?.fullName ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [locality, setLocality] = useState(profile?.locality ?? '');
   const [language, setLanguage] = useState(profile?.preferredLanguage ?? '');
+  const [caregiverLinks, setCaregiverLinks] = useState<ElderlyCaregiverLinkDisplay[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      getCaregiverLinksForElderly(user.uid).then(setCaregiverLinks).catch(() => undefined);
+    }, [user]),
+  );
 
   async function save() {
     if (!user || fullName.trim().length < 2)
@@ -134,6 +146,39 @@ export default function Profile() {
             </View>
           )}
         </View>
+
+        {!editing ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Caregiver Connection</Text>
+            <View style={styles.accountCard}>
+              <View style={styles.connectionContent}>
+                <Text style={styles.connectionTitle}>
+                  {caregiverLinks.some((item) => item.status === 'accepted')
+                    ? caregiverLinks.find((item) => item.status === 'accepted')?.caregiverName
+                    : caregiverLinks.some((item) => item.status === 'pending')
+                      ? 'Caregiver request waiting'
+                      : 'No caregiver connected'}
+                </Text>
+                <Text style={styles.connectionText}>
+                  {caregiverLinks.some((item) => item.status === 'pending')
+                    ? 'Review and respond to your pending caregiver request.'
+                    : 'Manage your caregiver connection securely.'}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.connectionButton}
+                  onPress={() =>
+                    router.push('/(elderly)/caregiver-connections' as Href)
+                  }
+                >
+                  <Text style={styles.connectionButtonText}>
+                    {caregiverLinks.some((item) => item.status === 'pending') ? 'Review Request' : 'View Connection'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         {/* Account section */}
         {!editing ? (
@@ -371,6 +416,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
   },
+  connectionContent: { padding: 18 },
+  connectionTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '800' },
+  connectionText: { color: colors.textSecondary, fontSize: 16, lineHeight: 23, marginTop: 6 },
+  connectionButton: { minHeight: 52, borderRadius: 13, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginTop: 15 },
+  connectionButtonText: { color: colors.primaryDark, fontSize: 16, fontWeight: '800' },
   accountRow: {
     paddingHorizontal: 18,
     paddingVertical: 14,

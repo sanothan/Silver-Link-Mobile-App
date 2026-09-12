@@ -1,5 +1,5 @@
 import { createUserWithEmailAndPassword, deleteUser, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
 import type { UserRole } from '../types/user';
 
@@ -35,7 +35,8 @@ export async function registerUser({ fullName, email, password, role }: Register
     const credential = await createUserWithEmailAndPassword(firebase.auth, email.trim().toLowerCase(), password);
     createdUser = credential.user;
     await updateProfile(createdUser, { displayName: fullName.trim() });
-    await setDoc(doc(firebase.db, 'users', createdUser.uid), {
+    const batch = writeBatch(firebase.db);
+    batch.set(doc(firebase.db, 'users', createdUser.uid), {
       uid: createdUser.uid,
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
@@ -44,6 +45,16 @@ export async function registerUser({ fullName, email, password, role }: Register
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    if (role === 'elderly') {
+      batch.set(doc(firebase.db, 'elderlyDirectory', createdUser.uid), {
+        uid: createdUser.uid,
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        role: 'elderly',
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
     return createdUser;
   } catch (error) {
     if (createdUser) await deleteUser(createdUser).catch(() => undefined);
