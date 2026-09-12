@@ -285,6 +285,15 @@ export default function CaregiverDashboardScreen() {
     });
   };
 
+  const handleViewVisits = () => {
+    const linked = caregiverLinks.find((link) => link.status === "accepted");
+    if (linked) {
+      handleViewRequests(linked.elderlyUserId);
+    } else {
+      Alert.alert("No linked elderly user", "Connect with an elderly user to view activity tracking.");
+    }
+  };
+
   const handlePlaceholderAction = (title: string) => {
     Alert.alert(
       title,
@@ -582,7 +591,7 @@ export default function CaregiverDashboardScreen() {
               <QuickActionCard
                 title="Visits"
                 icon="🗓"
-                onPress={() => handlePlaceholderAction("Visits")}
+                onPress={handleViewVisits}
               />
               <QuickActionCard
                 title="Message"

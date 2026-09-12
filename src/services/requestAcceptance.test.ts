@@ -1,4 +1,4 @@
-import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus } from './requestService';
+import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getRequestsForLinkedElderlyUser, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus } from './requestService';
 import { createAcceptanceNotifications, createScheduleConfirmationNotifications, createStatusNotification } from './notificationService';
 import { getUserProfile } from './userService';
 import type { UserProfile } from '../types/user';
@@ -364,5 +364,29 @@ describe('after acceptance (AC8 / reload)', () => {
     await acceptRequest('r1', 'vol-a');
     expect((await getOpenRequests()).map((item) => item.id)).toEqual(['r2']);
     expect((await getVolunteerRequests('vol-a'))[0].assignedVolunteerId).toBe('vol-a');
+  });
+});
+
+describe('caregiver activity tracking', () => {
+  it('loads historical requests with final status timestamps and excludes unrelated owners', async () => {
+    seedRequest('completed-1', {
+      status: 'completed',
+      completedAt: { toDate: () => new Date(2026, 7, 28) },
+    });
+    seedRequest('cancelled-1', {
+      status: 'cancelled',
+      cancelledAt: { toDate: () => new Date(2026, 7, 29) },
+    });
+    seedRequest('other-owner', {
+      createdBy: 'elderly-2',
+      status: 'completed',
+      completedAt: { toDate: () => new Date(2026, 8, 1) },
+    });
+
+    const requests = await getRequestsForLinkedElderlyUser('elderly-1');
+
+    expect(requests.map((item) => item.id)).toEqual(['cancelled-1', 'completed-1']);
+    expect(requests[0]).toMatchObject({ status: 'cancelled', cancelledAt: new Date(2026, 7, 29) });
+    expect(requests[1]).toMatchObject({ status: 'completed', completedAt: new Date(2026, 7, 28) });
   });
 });

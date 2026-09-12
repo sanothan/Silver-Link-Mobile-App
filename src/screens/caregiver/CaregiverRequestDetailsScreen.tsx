@@ -347,6 +347,21 @@ export default function CaregiverRequestDetailsScreen() {
             </View>
           )}
 
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Activity Timeline</Text>
+            <View style={styles.card}>
+              <TimelineRow label="Request Sent" date={request.createdAt} reached />
+              <TimelineRow label="Volunteer Found" date={request.acceptedAt} reached={Boolean(request.acceptedAt)} />
+              <TimelineRow label="Visit Scheduled" date={request.elderConfirmedAt} reached={Boolean(request.elderConfirmedAt)} />
+              <TimelineRow label="Visit Started" date={request.startedAt} reached={Boolean(request.startedAt)} />
+              {request.status === "cancelled" ? (
+                <TimelineRow label="Cancelled" date={request.cancelledAt} reached />
+              ) : (
+                <TimelineRow label="Completed" date={request.completedAt} reached={request.status === "completed"} />
+              )}
+            </View>
+          </View>
+
           {/* Metadata */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Details</Text>
@@ -380,6 +395,28 @@ export default function CaregiverRequestDetailsScreen() {
         </ScrollView>
       </View>
     </SafeAreaView>
+  );
+}
+
+function TimelineRow({
+  label,
+  date,
+  reached,
+}: {
+  label: string;
+  date?: Date;
+  reached: boolean;
+}) {
+  return (
+    <View style={styles.timelineRow}>
+      <Text style={[styles.timelineMark, reached && styles.timelineMarkReached]}>
+        {reached ? "✓" : "○"}
+      </Text>
+      <View style={styles.timelineCopy}>
+        <Text style={[styles.timelineLabel, reached && styles.timelineLabelReached]}>{label}</Text>
+        {date ? <Text style={styles.timelineDate}>{date.toLocaleDateString()}</Text> : null}
+      </View>
+    </View>
   );
 }
 
@@ -421,6 +458,31 @@ const styles = StyleSheet.create({
     gap: 24,
     paddingBottom: 32,
   },
+  timelineRow: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  timelineMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    textAlign: "center",
+    textAlignVertical: "center",
+    color: colors.textMuted,
+    backgroundColor: colors.surfaceSoft,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  timelineMarkReached: {
+    color: colors.textOnPrimary,
+    backgroundColor: colors.primary,
+  },
+  timelineCopy: { flex: 1 },
+  timelineLabel: { color: colors.textMuted, fontSize: 15, fontWeight: "700" },
+  timelineLabelReached: { color: colors.textPrimary },
+  timelineDate: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   section: {
     gap: 12,
   },

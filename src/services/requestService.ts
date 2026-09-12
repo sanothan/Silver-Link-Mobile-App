@@ -87,6 +87,12 @@ function fromSnapshot(snapshot: {
         ? data.volunteerRating
         : undefined,
     createdAt: asDate(data.createdAt),
+    acceptedAt: asDate(data.acceptedAt),
+    elderConfirmedAt: asDate(data.elderConfirmedAt),
+    startedAt: asDate(data.startedAt),
+    completedAt: asDate(data.completedAt),
+    cancelledAt: asDate(data.cancelledAt),
+    cancelledBy: asText(data.cancelledBy),
     updatedAt: asDate(data.updatedAt),
   };
 }
@@ -124,7 +130,17 @@ export async function getElderlyRequests(uid: string) {
   return snapshot.docs
     .map(fromSnapshot)
     .sort(
-      (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+      (a, b) =>
+        (b.completedAt?.getTime() ??
+          b.cancelledAt?.getTime() ??
+          b.updatedAt?.getTime() ??
+          b.createdAt?.getTime() ??
+          0) -
+        (a.completedAt?.getTime() ??
+          a.cancelledAt?.getTime() ??
+          a.updatedAt?.getTime() ??
+          a.createdAt?.getTime() ??
+          0),
     );
 }
 
