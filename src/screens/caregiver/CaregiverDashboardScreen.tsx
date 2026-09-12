@@ -285,6 +285,13 @@ export default function CaregiverDashboardScreen() {
     });
   };
 
+  const handleViewTrustedContact = (elderlyUserId: string) => {
+    router.push({
+      pathname: "caregiver-trusted-contact" as any,
+      params: { elderlyUserId },
+    });
+  };
+
   const handleViewVisits = () => {
     const linked = caregiverLinks.find((link) => link.status === "accepted");
     if (linked) {
@@ -472,6 +479,16 @@ export default function CaregiverDashboardScreen() {
                             >
                               <Text style={styles.inlineActionText}>
                                 View Requests
+                              </Text>
+                              <Text style={styles.inlineActionArrow}>→</Text>
+                            </Pressable>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => handleViewTrustedContact(link.elderlyUserId)}
+                              style={styles.inlineAction}
+                            >
+                              <Text style={styles.inlineActionText}>
+                                Trusted Contact
                               </Text>
                               <Text style={styles.inlineActionArrow}>→</Text>
                             </Pressable>
