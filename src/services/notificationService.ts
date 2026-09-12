@@ -18,9 +18,12 @@ import {
   ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER,
   ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER,
   SCHEDULE_CONFIRMATION_TITLE,
+  VOLUNTEER_VERIFICATION_APPROVED_TITLE,
+  VOLUNTEER_VERIFICATION_REJECTED_TITLE,
   buildAcceptanceMessage,
   buildScheduleConfirmationMessage,
   buildStatusNotificationContent,
+  buildVolunteerVerificationMessage,
   notificationTypeForStatus,
   type AcceptanceNotificationContext,
   type AppNotification,
@@ -30,6 +33,7 @@ import {
   type NotificationType,
   type ScheduleConfirmationContext,
   type StatusNotificationContext,
+  type VolunteerVerificationNotificationContext,
 } from "../types/notification";
 
 function requireDb() {
@@ -56,6 +60,8 @@ const TYPES: NotificationType[] = [
   "caregiver_link_request",
   "caregiver_link_accepted",
   "caregiver_link_rejected",
+  "volunteer_verification_approved",
+  "volunteer_verification_rejected",
 ];
 
 function fromSnapshot(snapshot: {
@@ -129,6 +135,38 @@ export async function createCaregiverLinkDecisionNotification(
         : "Your caregiver connection request was declined.",
       linkId: context.linkId,
       elderlyUserId: context.elderlyUserId,
+      read: false,
+      createdAt: serverTimestamp(),
+    },
+  );
+}
+
+/**
+ * Tells a volunteer how their verification was decided. The id is keyed on the
+ * volunteer and the decision, so replaying a decision updates the same alert
+ * instead of stacking duplicates, while a later reversal arrives as its own.
+ */
+export async function createVolunteerVerificationNotification(
+  context: VolunteerVerificationNotificationContext,
+) {
+  const database = requireDb();
+  const approved = context.decision === "approved";
+  const type = approved
+    ? ("volunteer_verification_approved" as const)
+    : ("volunteer_verification_rejected" as const);
+  await setDoc(
+    doc(database, "notifications", `${context.volunteerId}_${type}`),
+    {
+      userId: context.volunteerId,
+      audience: "volunteer",
+      type,
+      title: approved
+        ? VOLUNTEER_VERIFICATION_APPROVED_TITLE
+        : VOLUNTEER_VERIFICATION_REJECTED_TITLE,
+      message: buildVolunteerVerificationMessage(context),
+      volunteerId: context.volunteerId,
+      volunteerName: context.volunteerName ?? null,
+      volunteerVerified: approved,
       read: false,
       createdAt: serverTimestamp(),
     },

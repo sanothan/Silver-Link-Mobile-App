@@ -54,3 +54,45 @@ export interface VolunteerDashboardData {
   availability: VolunteerAvailability | null;
   updates: VolunteerUpdate[];
 }
+
+export type VolunteerVerificationDecision = 'approved' | 'rejected';
+
+/** A volunteer as the admin verification queue sees them. */
+export interface VolunteerVerificationRow {
+  uid: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  locality?: string;
+  bio?: string;
+  experience?: string;
+  accountStatus: string;
+  verificationStatus: VolunteerVerificationStatus;
+  submittedAt?: Date;
+  decidedAt?: Date;
+  decidedByName?: string;
+  decisionNote?: string;
+}
+
+/**
+ * One immutable entry in the verification audit trail. Written on every
+ * approve/reject so a decision can always be traced back to the admin who
+ * made it, when, and why.
+ */
+export interface VolunteerVerificationRecord {
+  id: string;
+  volunteerId: string;
+  volunteerName: string;
+  decision: VolunteerVerificationDecision;
+  adminId: string;
+  adminName: string;
+  note?: string;
+  decidedAt?: Date;
+}
+
+export interface VolunteerVerificationDecisionInput {
+  volunteerId: string;
+  volunteerName: string;
+  decision: VolunteerVerificationDecision;
+  note?: string;
+}

@@ -106,9 +106,37 @@ service cloud.firestore {
     }
 
     // ---- volunteer/{uid}-keyed collections ----
+    // The verification fields are the admin's decision record. A volunteer may
+    // edit the rest of their own profile but must never be able to mark
+    // themselves verified, so every verification key is admin-only here.
+    function touchesVerificationFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['verificationStatus', 'verificationDecidedAt', 'verificationDecidedBy', 'verificationDecidedByName', 'verificationNote']);
+    }
+
     match /volunteerProfiles/{uid} {
       allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
-      allow write: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+      allow create: if isAdmin() ||
+        (isOwner(uid) && hasPlatformAccess() &&
+          !request.resource.data.keys()
+            .hasAny(['verificationStatus', 'verificationDecidedAt', 'verificationDecidedBy', 'verificationDecidedByName', 'verificationNote']));
+      allow update: if isAdmin() ||
+        (isOwner(uid) && hasPlatformAccess() && !touchesVerificationFields());
+      allow delete: if isAdmin();
+    }
+
+    // ---- volunteer verification audit trail ----
+    // Append-only by design: an admin records a decision, everyone keeps it.
+    // Volunteers may read their own history so a decision is never invisible
+    // to the person it affects.
+    match /volunteerVerifications/{recordId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.volunteerId == request.auth.uid);
+      allow create: if isAdmin() &&
+        request.resource.data.adminId == request.auth.uid &&
+        request.resource.data.decision in ['approved', 'rejected'] &&
+        request.resource.data.volunteerId is string;
+      allow update, delete: if false;
     }
 
     match /volunteerStats/{uid} {
@@ -301,6 +329,18 @@ service cloud.firestore {
           get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.caregiverId == request.resource.data.userId &&
           ((get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'accepted' && request.resource.data.type == 'caregiver_link_accepted') ||
            (get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'rejected' && request.resource.data.type == 'caregiver_link_rejected'))));
+      // An admin telling a volunteer how their verification was decided. The
+      // stored verification status must already match the decision, so the
+      // alert can never claim something the record does not say.
+      allow create: if isAdmin() && request.resource.data.read == false &&
+        request.resource.data.audience == 'volunteer' &&
+        request.resource.data.userId is string &&
+        request.resource.data.userId == request.resource.data.volunteerId &&
+        exists(/databases/$(database)/documents/volunteerProfiles/$(request.resource.data.userId)) &&
+        ((request.resource.data.type == 'volunteer_verification_approved' &&
+          get(/databases/$(database)/documents/volunteerProfiles/$(request.resource.data.userId)).data.verificationStatus == 'verified') ||
+         (request.resource.data.type == 'volunteer_verification_rejected' &&
+          get(/databases/$(database)/documents/volunteerProfiles/$(request.resource.data.userId)).data.verificationStatus == 'rejected'));
       allow update: if isAdmin() ||
         (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId &&
           request.resource.data.read == true &&
