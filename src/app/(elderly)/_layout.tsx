@@ -55,7 +55,8 @@ export default function ElderlyTabLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="notifications" options={{ href: null }} />
+    <Tabs.Screen name="notifications" options={{ href: null }} />
+    <Tabs.Screen name="caregiver-connections" options={{ href: null }} />
       <Tabs.Screen
         name="alerts"
         options={{

@@ -4,15 +4,24 @@ import {
     getDoc,
     getDocs,
     query,
+    runTransaction,
     serverTimestamp,
     setDoc,
     updateDoc,
     where,
     type Timestamp,
 } from "firebase/firestore";
-import type { CaregiverLink, CaregiverLinkDisplay } from "../types/caregiver";
+import type {
+  CaregiverLink,
+  CaregiverLinkDisplay,
+  ElderlyCaregiverLinkDisplay,
+} from "../types/caregiver";
 import { db } from "./firebaseConfig";
 import { getUserProfile } from "./userService";
+import {
+  createCaregiverLinkDecisionNotification,
+  createCaregiverLinkRequestNotification,
+} from "./notificationService";
 
 function requireDb() {
   if (!db) throw new Error("Firebase is not configured.");
@@ -45,6 +54,9 @@ function fromFirestore(id: string, data: any): CaregiverLink {
       ? data.status
       : "pending",
     requestedBy: "caregiver",
+    caregiverName: asText(data.caregiverName),
+    caregiverPhotoUrl: asText(data.caregiverPhotoUrl),
+    relationship: asText(data.relationship),
     createdAt: asDate(data.createdAt) ?? new Date(),
     updatedAt: asDate(data.updatedAt) ?? new Date(),
     ...(data.acceptedAt && { acceptedAt: asDate(data.acceptedAt) }),
@@ -62,7 +74,7 @@ export async function findElderlyUserByEmail(email: string) {
   const normalizedEmail = email.trim().toLowerCase();
 
   const q = query(
-    collection(dbRef, "users"),
+    collection(dbRef, "elderlyDirectory"),
     where("email", "==", normalizedEmail),
     where("role", "==", "elderly"),
   );
@@ -72,14 +84,13 @@ export async function findElderlyUserByEmail(email: string) {
     return null;
   }
 
-  const doc = snapshot.docs[0];
-  const profile = await getUserProfile(doc.id);
+  const profile = snapshot.docs[0].data();
 
   return {
-    uid: profile.uid,
-    fullName: profile.fullName,
-    email: profile.email,
-    photoUrl: profile.photoUrl,
+    uid: asText(profile.uid) ?? snapshot.docs[0].id,
+    fullName: asText(profile.fullName) ?? "SilverLink member",
+    email: asText(profile.email) ?? normalizedEmail,
+    photoUrl: asText(profile.photoUrl),
   };
 }
 
@@ -104,12 +115,10 @@ export async function checkExistingLink(
     return { exists: false };
   }
 
-  const link = snapshot.docs[0].data();
-  const status = link.status as string;
-
-  if (status === "pending" || status === "accepted") {
-    return { exists: true, status };
-  }
+  const active = snapshot.docs
+    .map((item) => item.data().status as string)
+    .find((status) => status === "pending" || status === "accepted");
+  if (active) return { exists: true, status: active };
 
   return { exists: false };
 }
@@ -145,16 +154,13 @@ export async function sendCaregiverLinkRequest(
   }
 
   // Verify elderly user exists and has the correct role
-  try {
-    const elderlyProfile = await getUserProfile(elderlyUserId);
-    if (elderlyProfile.role !== "elderly") {
-      throw new Error("This user is not an elderly SilverLink member.");
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("No user profile")) {
-      throw new Error("We couldn't find the elderly user. Please try again.");
-    }
-    throw err;
+  const elderlySnapshot = await getDoc(doc(dbRef, "elderlyDirectory", elderlyUserId));
+  if (!elderlySnapshot.exists() || elderlySnapshot.data().role !== "elderly")
+    throw new Error("We couldn't find the elderly user. Please try again.");
+
+  const caregiverProfile = await getUserProfile(caregiverId);
+  if (caregiverProfile.role !== "caregiver") {
+    throw new Error("Only a caregiver account can send a connection request.");
   }
 
   // Create the link request
@@ -166,16 +172,126 @@ export async function sendCaregiverLinkRequest(
     elderlyUserId,
     status: "pending",
     requestedBy: "caregiver",
+    caregiverName: caregiverProfile.fullName,
+    ...(caregiverProfile.photoUrl && {
+      caregiverPhotoUrl: caregiverProfile.photoUrl,
+    }),
     createdAt: now,
     updatedAt: now,
   };
 
   await setDoc(doc(dbRef, "caregiverLinks", linkId), linkData);
 
+  await createCaregiverLinkRequestNotification({
+    linkId,
+    caregiverId,
+    caregiverName: caregiverProfile.fullName,
+    elderlyUserId,
+  }).catch((error) =>
+    console.warn("Caregiver link created but its notification could not be stored.", error),
+  );
+
   return {
     id: linkId,
     ...linkData,
   };
+}
+
+export async function getCaregiverLinksForElderly(
+  elderlyUserId: string,
+): Promise<ElderlyCaregiverLinkDisplay[]> {
+  const snapshot = await getDocs(
+    query(
+      collection(requireDb(), "caregiverLinks"),
+      where("elderlyUserId", "==", elderlyUserId),
+    ),
+  );
+
+  return snapshot.docs
+    .map((item) => fromFirestore(item.id, item.data()))
+    .map((link) => ({
+      id: link.id,
+      caregiverId: link.caregiverId,
+      elderlyUserId: link.elderlyUserId,
+      caregiverName: link.caregiverName || "SilverLink caregiver",
+      caregiverPhotoUrl: link.caregiverPhotoUrl,
+      relationship: link.relationship,
+      status: link.status,
+      createdAt: asDate(link.createdAt) ?? new Date(),
+      updatedAt: asDate(link.updatedAt) ?? new Date(),
+    }))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+async function decideCaregiverLink(
+  linkId: string,
+  elderlyUserId: string,
+  decision: "accepted" | "rejected",
+): Promise<CaregiverLink> {
+  const database = requireDb();
+  const linkRef = doc(database, "caregiverLinks", linkId);
+  const elderlyRef = doc(database, "users", elderlyUserId);
+
+  const result = await runTransaction(database, async (transaction) => {
+    const [linkSnapshot, elderlySnapshot] = await Promise.all([
+      transaction.get(linkRef),
+      transaction.get(elderlyRef),
+    ]);
+    if (!linkSnapshot.exists()) throw new Error("This connection request does not exist.");
+    if (!elderlySnapshot.exists()) throw new Error("Your SilverLink profile could not be found.");
+
+    const link = fromFirestore(linkSnapshot.id, linkSnapshot.data());
+    if (link.elderlyUserId !== elderlyUserId)
+      throw new Error("You cannot update this connection request.");
+    if (link.status !== "pending")
+      throw new Error("This connection request has already been updated.");
+    const elderlyData = elderlySnapshot.data();
+    if (
+      decision === "accepted" &&
+      asText(elderlyData.caregiverId) &&
+      elderlyData.caregiverId !== link.caregiverId
+    ) {
+      throw new Error("A caregiver is already connected to this account.");
+    }
+
+    const timestampField = decision === "accepted" ? "acceptedAt" : "rejectedAt";
+    transaction.update(linkRef, {
+      status: decision,
+      [timestampField]: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    if (decision === "accepted") {
+      transaction.update(elderlyRef, {
+        caregiverId: link.caregiverId,
+        caregiverLinkId: link.id,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    return {
+      link,
+      elderlyName: asText(elderlyData.fullName) ?? "Your family member",
+    };
+  });
+
+  await createCaregiverLinkDecisionNotification({
+    linkId,
+    caregiverId: result.link.caregiverId,
+    elderlyUserId,
+    elderlyName: result.elderlyName,
+    decision,
+  }).catch((error) =>
+    console.warn("Caregiver link updated but its notification could not be stored.", error),
+  );
+  return { ...result.link, status: decision, updatedAt: new Date() };
+}
+
+export function acceptCaregiverLink(linkId: string, elderlyUserId: string) {
+  return decideCaregiverLink(linkId, elderlyUserId, "accepted");
+}
+
+export function rejectCaregiverLink(linkId: string, elderlyUserId: string) {
+  return decideCaregiverLink(linkId, elderlyUserId, "rejected");
 }
 
 /**
@@ -196,6 +312,7 @@ export async function getCaregiverLinks(
 
   for (const docSnapshot of snapshot.docs) {
     const link = fromFirestore(docSnapshot.id, docSnapshot.data());
+    if (link.status !== "pending" && link.status !== "accepted") continue;
 
     try {
       const elderlyProfile = await getUserProfile(link.elderlyUserId);

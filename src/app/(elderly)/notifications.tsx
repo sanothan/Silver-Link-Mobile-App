@@ -27,6 +27,9 @@ function iconFor(type: AppNotification['type']) {
     case 'request_started': return '▶';
     case 'request_completed': return '★';
     case 'request_cancelled': return '×';
+    case 'caregiver_link_request': return 'C';
+    case 'caregiver_link_accepted': return '✓';
+    case 'caregiver_link_rejected': return '×';
     default: return '!';
   }
 }
@@ -38,6 +41,9 @@ function iconBg(type: AppNotification['type']): string {
     case 'request_started': return colors.warningLight;
     case 'request_completed': return colors.successLight;
     case 'request_cancelled': return colors.errorLight;
+    case 'caregiver_link_request': return '#EDE9FE';
+    case 'caregiver_link_accepted': return colors.successLight;
+    case 'caregiver_link_rejected': return colors.errorLight;
     default: return colors.surfaceSoft;
   }
 }
@@ -49,6 +55,9 @@ function iconColor(type: AppNotification['type']): string {
     case 'request_started': return colors.warning;
     case 'request_completed': return colors.success;
     case 'request_cancelled': return colors.error;
+    case 'caregiver_link_request': return colors.primary;
+    case 'caregiver_link_accepted': return colors.success;
+    case 'caregiver_link_rejected': return colors.error;
     default: return colors.textSecondary;
   }
 }
@@ -110,6 +119,8 @@ export default function Notifications() {
     }
     if (item.requestId)
       router.push(`/(elderly)/request-details/${item.requestId}` as Href);
+    else if (item.linkId)
+      router.push('/(elderly)/caregiver-connections' as Href);
   };
 
   const markAll = async () => {

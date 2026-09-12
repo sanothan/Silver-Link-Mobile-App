@@ -8,6 +8,7 @@ export interface UserProfile {
   role: UserRole;
   status: UserStatus;
   caregiverId?: string;
+  caregiverLinkId?: string;
   phone?: string;
   locality?: string;
   preferredLanguage?: string;

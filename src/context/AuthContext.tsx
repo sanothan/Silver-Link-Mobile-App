@@ -1,7 +1,7 @@
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import { auth } from '../services/firebaseConfig';
-import { getUserProfile, UserProfileError, type ProfileIssue } from '../services/userService';
+import { ensureElderlyDirectoryProfile, getUserProfile, UserProfileError, type ProfileIssue } from '../services/userService';
 import type { UserProfile } from '../types/user';
 
 type AuthContextValue = {
@@ -29,7 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileIssue(null);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        setProfile(await getUserProfile(uid));
+        const loadedProfile = await getUserProfile(uid);
+        setProfile(loadedProfile);
+        await ensureElderlyDirectoryProfile(loadedProfile).catch((error) =>
+          console.warn('[auth] Unable to refresh the elderly directory entry.', error),
+        );
         return;
       } catch (error) {
         if (attempt < 2) {
