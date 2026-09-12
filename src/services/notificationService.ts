@@ -34,6 +34,7 @@ import {
   type ScheduleConfirmationContext,
   type StatusNotificationContext,
   type VolunteerVerificationNotificationContext,
+  type ChatMessageNotificationContext,
 } from "../types/notification";
 
 function requireDb() {
@@ -60,6 +61,7 @@ const TYPES: NotificationType[] = [
   "caregiver_link_request",
   "caregiver_link_accepted",
   "caregiver_link_rejected",
+  "chat_message",
   "volunteer_verification_approved",
   "volunteer_verification_rejected",
 ];
@@ -83,6 +85,8 @@ function fromSnapshot(snapshot: {
     title: asText(data.title) ?? ACCEPTANCE_NOTIFICATION_TITLE,
     message: asText(data.message) ?? "",
     requestId: asText(data.requestId),
+    chatId: asText(data.chatId),
+    senderId: asText(data.senderId),
     linkId: asText(data.linkId),
     volunteerId: asText(data.volunteerId),
     volunteerName: asText(data.volunteerName),
@@ -167,6 +171,35 @@ export async function createVolunteerVerificationNotification(
       volunteerId: context.volunteerId,
       volunteerName: context.volunteerName ?? null,
       volunteerVerified: approved,
+      read: false,
+      createdAt: serverTimestamp(),
+    },
+  );
+}
+
+export async function createChatMessageNotification(
+  context: ChatMessageNotificationContext,
+) {
+  const database = requireDb();
+  const sender = context.senderRole === "caregiver" ? "Caregiver" : "Volunteer";
+  await setDoc(
+    doc(
+      database,
+      "notifications",
+      `${context.requestId}_chat_message_${context.recipientId}_${context.messageId}`,
+    ),
+    {
+      userId: context.recipientId,
+      audience: context.senderRole === "caregiver" ? "volunteer" : "caregiver",
+      type: "chat_message",
+      title: `New Message From ${sender}`,
+      message:
+        context.senderRole === "caregiver"
+          ? `You have a new message about your ${context.activityType} activity.`
+          : "You have a new message from the volunteer about your linked elderly user's activity.",
+      requestId: context.requestId,
+      chatId: context.requestId,
+      senderId: context.senderId,
       read: false,
       createdAt: serverTimestamp(),
     },

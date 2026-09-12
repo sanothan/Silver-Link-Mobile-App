@@ -13,6 +13,7 @@ export default function VolunteerTabLayout() {
     <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <Text style={[styles.icon, { color }]}>{icons.profile}</Text> }} />
     <Tabs.Screen name="availability" options={{ href: null }} />
     <Tabs.Screen name="request-details/[id]" options={{ href: null }} />
+    <Tabs.Screen name="request-chat/[id]" options={{ href: null }} />
   </Tabs>;
 }
 

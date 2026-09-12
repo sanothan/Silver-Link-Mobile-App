@@ -1,7 +1,7 @@
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
-import type { UserProfile } from '../types/user';
+import type { TrustedContact, UserProfile } from '../types/user';
 
 export type ProfileIssue = 'missing-profile' | 'invalid-role' | 'invalid-status' | 'load-failed';
 
@@ -40,6 +40,17 @@ export async function getUserProfile(uid: string): Promise<UserProfile> {
     locality: typeof data.locality === 'string' ? data.locality : undefined,
     preferredLanguage: typeof data.preferredLanguage === 'string' ? data.preferredLanguage : undefined,
     photoUrl: typeof data.photoUrl === 'string' ? data.photoUrl : undefined,
+    trustedContact:
+      data.trustedContact && typeof data.trustedContact === 'object'
+        ? {
+            name: typeof data.trustedContact.name === 'string' ? data.trustedContact.name : '',
+            relationship: typeof data.trustedContact.relationship === 'string' ? data.trustedContact.relationship : '',
+            phone: typeof data.trustedContact.phone === 'string' ? data.trustedContact.phone : '',
+            ...(typeof data.trustedContact.email === 'string' && data.trustedContact.email.trim()
+              ? { email: data.trustedContact.email }
+              : {}),
+          }
+        : undefined,
   };
 }
 
@@ -60,4 +71,20 @@ export async function updateUserProfile(uid: string, values: UserManagedProfile)
   const clean = { fullName: values.fullName.trim(), phone: values.phone?.trim() || null, locality: values.locality?.trim() || null, preferredLanguage: values.preferredLanguage?.trim() || null, updatedAt: serverTimestamp() };
   await updateDoc(doc(db, 'users', uid), clean);
   await updateProfile(auth.currentUser, { displayName: clean.fullName });
+}
+
+export async function updateTrustedContact(
+  caregiverUid: string,
+  elderlyUid: string,
+  trustedContact: TrustedContact | null,
+) {
+  if (!db || !auth?.currentUser || auth.currentUser.uid !== caregiverUid)
+    throw new Error('You are not signed in.');
+  const { hasAcceptedCaregiverLink } = await import('./caregiverLinkService');
+  if (!(await hasAcceptedCaregiverLink(caregiverUid, elderlyUid)))
+    throw new Error('You need an accepted caregiver connection.');
+  await updateDoc(doc(db, 'users', elderlyUid), {
+    trustedContact,
+    updatedAt: serverTimestamp(),
+  });
 }

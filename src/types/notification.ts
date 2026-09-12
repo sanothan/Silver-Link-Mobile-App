@@ -9,6 +9,7 @@ export type NotificationType =
   | "caregiver_link_request"
   | "caregiver_link_accepted"
   | "caregiver_link_rejected"
+  | "chat_message"
   | "volunteer_verification_approved"
   | "volunteer_verification_rejected";
 export type NotificationAudience = "elderly" | "caregiver" | "volunteer";
@@ -21,6 +22,8 @@ export interface AppNotification {
   title: string;
   message: string;
   requestId?: string;
+  chatId?: string;
+  senderId?: string;
   linkId?: string;
   volunteerId?: string;
   volunteerName?: string;
@@ -49,6 +52,15 @@ export interface VolunteerVerificationNotificationContext {
   volunteerName?: string;
   decision: "approved" | "rejected";
   note?: string;
+}
+
+export interface ChatMessageNotificationContext {
+  requestId: string;
+  messageId: string;
+  recipientId: string;
+  senderId: string;
+  senderRole: "caregiver" | "volunteer";
+  activityType: string;
 }
 
 export const VOLUNTEER_VERIFICATION_APPROVED_TITLE = "Verification Approved";

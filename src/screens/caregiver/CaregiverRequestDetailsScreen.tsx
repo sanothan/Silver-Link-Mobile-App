@@ -13,6 +13,7 @@ import { useAuth } from "../../context/AuthContext";
 import { hasAcceptedCaregiverLink } from "../../services/caregiverLinkService";
 import { getRequestById } from "../../services/requestService";
 import { colors } from "../../theme/colors";
+import { canChatForStatus } from "../../types/chat";
 import {
     type CompanionshipRequest,
     REQUEST_STATUS_LABELS,
@@ -347,6 +348,21 @@ export default function CaregiverRequestDetailsScreen() {
             </View>
           )}
 
+          {request.assignedVolunteerId && request.caregiverId && canChatForStatus(request.status) ? (
+            <Pressable
+              accessibilityRole="button"
+              style={styles.chatButton}
+              onPress={() =>
+                router.push({
+                  pathname: "caregiver-volunteer-chat/[id]" as any,
+                  params: { id: request.id, elderlyUserId },
+                })
+              }
+            >
+              <Text style={styles.chatButtonText}>Message Volunteer</Text>
+            </Pressable>
+          ) : null}
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Activity Timeline</Text>
             <View style={styles.card}>
@@ -485,6 +501,18 @@ const styles = StyleSheet.create({
   timelineDate: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   section: {
     gap: 12,
+  },
+  chatButton: {
+    minHeight: 54,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chatButtonText: {
+    color: colors.textOnPrimary,
+    fontSize: 17,
+    fontWeight: "800",
   },
   sectionTitle: {
     fontSize: 16,
