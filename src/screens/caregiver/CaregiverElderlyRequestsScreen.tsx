@@ -19,7 +19,7 @@ import {
     REQUEST_STATUS_LABELS,
 } from "../../types/request";
 
-type FilterStatus = "all" | "active" | "completed";
+type FilterStatus = "all" | "active" | "history";
 
 const STATUS_CHIP_COLORS: Record<string, { bg: string; text: string }> = {
   pending: { bg: "#DBEAFE", text: "#1E40AF" },
@@ -49,7 +49,7 @@ export default function CaregiverElderlyRequestsScreen() {
   const filteredRequests = requests.filter((req) => {
     if (filterStatus === "all") return true;
     if (filterStatus === "active") return isActiveRequest(req);
-    if (filterStatus === "completed")
+    if (filterStatus === "history")
       return ["completed", "cancelled"].includes(req.status);
     return true;
   });
@@ -124,6 +124,8 @@ export default function CaregiverElderlyRequestsScreen() {
           day: "numeric",
         })
       : "";
+      const finalDate = item.status === "completed" ? item.completedAt : item.cancelledAt;
+      const duration = item.durationLabel || (item.durationMinutes ? `${item.durationMinutes} minutes` : undefined);
 
     return (
       <Pressable
@@ -141,6 +143,7 @@ export default function CaregiverElderlyRequestsScreen() {
           <Text style={styles.dateTime} numberOfLines={1}>
             {formattedDate} • {item.preferredTime}
           </Text>
+          {duration ? <Text style={styles.detailText}>Duration: {duration}</Text> : null}
 
           {item.assignedVolunteerId && item.volunteerName && (
             <View style={styles.volunteerRow}>
@@ -160,6 +163,11 @@ export default function CaregiverElderlyRequestsScreen() {
               {REQUEST_STATUS_LABELS[item.status]}
             </Text>
           </View>
+          {finalDate ? (
+            <Text style={styles.finalDate}>
+              {item.status === "completed" ? "Completed" : "Cancelled"} on {finalDate.toLocaleDateString()}
+            </Text>
+          ) : null}
         </View>
 
         <Text style={styles.arrow}>→</Text>
@@ -179,7 +187,7 @@ export default function CaregiverElderlyRequestsScreen() {
             >
               <Text style={styles.backButton}>← Back</Text>
             </Pressable>
-            <Text style={styles.title}>Requests</Text>
+            <Text style={styles.title}>Activity Tracking</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -203,7 +211,7 @@ export default function CaregiverElderlyRequestsScreen() {
             >
               <Text style={styles.backButton}>← Back</Text>
             </Pressable>
-            <Text style={styles.title}>Requests</Text>
+            <Text style={styles.title}>Activity Tracking</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -242,7 +250,7 @@ export default function CaregiverElderlyRequestsScreen() {
             >
               <Text style={styles.backButton}>← Back</Text>
             </Pressable>
-            <Text style={styles.title}>Requests</Text>
+            <Text style={styles.title}>Activity Tracking</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -277,7 +285,7 @@ export default function CaregiverElderlyRequestsScreen() {
           >
             <Text style={styles.backButton}>← Back</Text>
           </Pressable>
-          <Text style={styles.title}>Requests</Text>
+          <Text style={styles.title}>Activity Tracking</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -287,7 +295,7 @@ export default function CaregiverElderlyRequestsScreen() {
 
         {filteredRequests.length > 0 && (
           <View style={styles.filterBar}>
-            {(["all", "active", "completed"] as const).map((filter) => (
+            {(["all", "active", "history"] as const).map((filter) => (
               <Pressable
                 key={filter}
                 onPress={() => setFilterStatus(filter)}
@@ -308,7 +316,7 @@ export default function CaregiverElderlyRequestsScreen() {
                     ? "All"
                     : filter === "active"
                       ? "Active"
-                      : "Completed"}
+                      : "History"}
                 </Text>
               </Pressable>
             ))}
@@ -322,9 +330,9 @@ export default function CaregiverElderlyRequestsScreen() {
               <Text style={styles.emptyStateMessage}>
                 {requests.length === 0
                   ? "This elderly user has not created any companionship requests."
-                  : "No " +
-                    (filterStatus === "active" ? "active" : "completed") +
-                    " requests found."}
+                    : filterStatus === "active"
+                      ? "No active activities found."
+                      : "No completed or cancelled activities found."}
               </Text>
             </View>
           </View>
@@ -436,6 +444,15 @@ const styles = StyleSheet.create({
   dateTime: {
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  detailText: {
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  finalDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "600",
   },
   volunteerRow: {
     gap: 4,

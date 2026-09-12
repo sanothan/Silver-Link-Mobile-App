@@ -49,6 +49,12 @@ export interface CompanionshipRequest {
   volunteerExperience?: string;
   volunteerRating?: number;
   createdAt?: Date;
+  acceptedAt?: Date;
+  elderConfirmedAt?: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  cancelledAt?: Date;
+  cancelledBy?: string;
   updatedAt?: Date;
 }
 

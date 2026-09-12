@@ -216,7 +216,8 @@ service cloud.firestore {
     match /requests/{requestId} {
       allow read: if isAdmin() ||
         (hasPlatformAccess() && resource.data.createdBy == request.auth.uid) ||
-        isRole('volunteer') || isRole('caregiver');
+        isRole('volunteer') ||
+        isLinkedCaregiver(resource.data.createdBy);
       allow create: if isRole('elderly') &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.status == 'pending' &&
