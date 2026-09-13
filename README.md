@@ -54,3 +54,17 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Deploying Firestore security rules
+
+The `firebase` package in `dependencies` is the client SDK and ships no CLI, so
+`npx firebase ...` fails with "could not determine executable to run". The CLI
+lives in a separate package, `firebase-tools`, which these scripts invoke:
+
+```bash
+npm run deploy:rules          # deploy firestore.rules to the default project
+npm run firebase -- login     # any other CLI command
+```
+
+The target project (`silverlink-972a7`) is set in `.firebaserc`, and
+`firebase.json` points the `firestore:rules` target at `firestore.rules`.
