@@ -30,10 +30,31 @@ service cloud.firestore {
         && request.resource.data.description.size() <= 1500
         && request.resource.data.category in [
           'unsafe_behaviour', 'harassment', 'scam_or_fraud', 'inappropriate_content', 'no_show', 'other'
-        ];
+        ]
+        // A reporter cannot pre-seed the triage trail an administrator will write into.
+        && request.resource.data.statusHistory == []
+        && request.resource.data.adminNote == '';
 
-      // Only administrators triage reports, and nobody may rewrite who filed one.
-      allow update: if isAdmin() && request.resource.data.reporterId == resource.data.reporterId;
+      // Only administrators triage reports, and nobody may rewrite who filed one, what was
+      // reported, or the history of how it was handled. `statusHistory` may only grow, and
+      // the entries already stored must come back unchanged, so the audit trail is append
+      // only even for an administrator.
+      allow update: if isAdmin()
+        && request.resource.data.reporterId == resource.data.reporterId
+        && request.resource.data.description == resource.data.description
+        && request.resource.data.category == resource.data.category
+        && request.resource.data.lastUpdatedBy == request.auth.uid
+        && request.resource.data.status in ['open', 'under_review', 'resolved', 'dismissed']
+        && request.resource.data.adminNote is string
+        && request.resource.data.adminNote.size() <= 1000
+        && request.resource.data.statusHistory is list
+        // `get` with a default keeps reports filed before triage history existed updatable.
+        && request.resource.data.statusHistory.size() == resource.data.get('statusHistory', []).size() + 1
+        && request.resource.data.statusHistory[resource.data.get('statusHistory', []).size()].changedBy == request.auth.uid
+        && request.resource.data.statusHistory[resource.data.get('statusHistory', []).size()].status == request.resource.data.status
+        // A report may only be closed with a reason on record.
+        && (!(request.resource.data.status in ['resolved', 'dismissed'])
+            || request.resource.data.adminNote.size() > 0);
       allow delete: if false;
     }
   }

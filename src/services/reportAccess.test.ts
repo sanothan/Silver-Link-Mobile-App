@@ -12,6 +12,8 @@ const report: ReportRecord = {
   reporterId: 'elderly-7',
   reporterRole: 'elderly',
   adminNote: '',
+  statusHistory: [],
+  lastUpdatedBy: null,
 };
 
 it('lets only administrators list every report', () => {

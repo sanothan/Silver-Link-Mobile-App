@@ -1,7 +1,9 @@
 import {
+  Timestamp,
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   limit as queryLimit,
   orderBy,
@@ -13,11 +15,21 @@ import {
 import { db } from './firebaseConfig';
 import { assertCanListAllReports, redactReporters } from './reportAccess';
 import type { ReportViewer } from './reportAccess';
+import {
+  appendStatusChange,
+  buildStatusChange,
+  closesReport,
+  isReportStatus,
+  normaliseDecision,
+  validateTriageDecision,
+} from './reportTriage';
+import type { TriageDecision, TriageValidationResult } from './reportTriage';
 import { isUrgentCategory, normaliseDraft, validateReportDraft } from './reportValidation';
 import type {
   ReportDraft,
   ReportRecord,
   ReportStatus,
+  ReportStatusChange,
   ReportSubject,
   ReportSubjectOption,
   ReportSubjectType,
@@ -33,6 +45,23 @@ export class ReportValidationError extends Error {
     super('The report is missing required information.');
     this.name = 'ReportValidationError';
     this.errors = errors;
+  }
+}
+
+export class TriageValidationError extends Error {
+  readonly errors: TriageValidationResult['errors'];
+
+  constructor(errors: TriageValidationResult['errors']) {
+    super('The status update is missing required information.');
+    this.name = 'TriageValidationError';
+    this.errors = errors;
+  }
+}
+
+export class ReportNotFoundError extends Error {
+  constructor() {
+    super('This report no longer exists.');
+    this.name = 'ReportNotFoundError';
   }
 }
 
@@ -59,6 +88,24 @@ function asSubject(value: unknown): ReportSubject {
   return { type, id: asText(raw.id), label: asText(raw.label) };
 }
 
+/** Reads back the stored audit trail, skipping any entry that is not a usable change. */
+function asStatusHistory(value: unknown): ReportStatusChange[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const raw = (entry ?? {}) as Record<string, unknown>;
+    if (!isReportStatus(raw.status)) return [];
+    return [
+      {
+        status: raw.status,
+        previousStatus: isReportStatus(raw.previousStatus) ? raw.previousStatus : 'open',
+        note: asText(raw.note),
+        changedBy: asText(raw.changedBy),
+        changedAt: asDate(raw.changedAt),
+      },
+    ];
+  });
+}
+
 function toRecord(id: string, data: Record<string, unknown>): ReportRecord {
   const category = REPORT_CATEGORIES.find((entry) => entry.value === data.category)?.value ?? 'other';
   return {
@@ -73,6 +120,9 @@ function toRecord(id: string, data: Record<string, unknown>): ReportRecord {
     createdAt: asDate(data.createdAt),
     resolvedAt: asDate(data.resolvedAt),
     adminNote: asText(data.adminNote),
+    statusHistory: asStatusHistory(data.statusHistory),
+    lastUpdatedBy: asText(data.lastUpdatedBy) || null,
+    updatedAt: asDate(data.updatedAt),
   };
 }
 
@@ -95,6 +145,8 @@ export async function submitReport(draft: ReportDraft, reporter: ReportViewer): 
     reporterId: reporter.uid,
     reporterRole: reporter.role,
     adminNote: '',
+    statusHistory: [],
+    lastUpdatedBy: null,
     createdAt: serverTimestamp(),
   });
   return created.id;
@@ -123,19 +175,63 @@ export async function getMyReports(viewer: ReportViewer | null): Promise<ReportR
   return redactReporters(records, viewer);
 }
 
-export async function updateReportStatus(
-  viewer: ReportViewer | null,
-  id: string,
-  status: ReportStatus,
-  adminNote?: string,
-): Promise<void> {
+/** A single report with its full triage history. Administrators only. */
+export async function getReportForAdmin(viewer: ReportViewer | null, id: string): Promise<ReportRecord> {
   if (!db) throw new Error('Firebase is not configured.');
   assertCanListAllReports(viewer);
-  await updateDoc(doc(db, REPORTS_COLLECTION, id), {
-    status,
-    ...(adminNote === undefined ? {} : { adminNote }),
-    ...(status === 'resolved' || status === 'dismissed' ? { resolvedAt: serverTimestamp() } : {}),
+
+  const snapshot = await getDoc(doc(db, REPORTS_COLLECTION, id));
+  if (!snapshot.exists()) throw new ReportNotFoundError();
+  return toRecord(snapshot.id, snapshot.data() as Record<string, unknown>);
+}
+
+/**
+ * Stores an administrator's decision: the new status, the resolution note, and an entry
+ * appended to `statusHistory` so the trail of who changed what survives later edits.
+ * Throws TriageValidationError when the decision is incomplete, so the caller can
+ * highlight the offending field rather than writing a half-finished update.
+ */
+export async function applyReportTriage(
+  viewer: ReportViewer | null,
+  report: ReportRecord,
+  decision: TriageDecision,
+): Promise<ReportRecord> {
+  if (!db) throw new Error('Firebase is not configured.');
+  assertCanListAllReports(viewer);
+
+  const result = validateTriageDecision(decision, report);
+  if (!result.valid) throw new TriageValidationError(result.errors);
+
+  const clean = normaliseDecision(decision);
+  // serverTimestamp() is rejected inside an array element, so the entry carries a client
+  // timestamp while the document's own `updatedAt` stays server authored.
+  const change: ReportStatusChange = { ...buildStatusChange(clean, report, viewer.uid), changedAt: new Date() };
+  const history = appendStatusChange(report, change);
+
+  await updateDoc(doc(db, REPORTS_COLLECTION, report.id), {
+    status: clean.status,
+    adminNote: clean.note,
+    lastUpdatedBy: viewer.uid,
+    statusHistory: history.map((entry) => ({
+      status: entry.status,
+      previousStatus: entry.previousStatus,
+      note: entry.note,
+      changedBy: entry.changedBy,
+      changedAt: entry.changedAt ? Timestamp.fromDate(entry.changedAt) : Timestamp.now(),
+    })),
+    updatedAt: serverTimestamp(),
+    ...(closesReport(clean.status) ? { resolvedAt: serverTimestamp() } : {}),
   });
+
+  return {
+    ...report,
+    status: clean.status,
+    adminNote: clean.note,
+    lastUpdatedBy: viewer.uid,
+    statusHistory: history,
+    updatedAt: new Date(),
+    ...(closesReport(clean.status) ? { resolvedAt: new Date() } : {}),
+  };
 }
 
 /**
