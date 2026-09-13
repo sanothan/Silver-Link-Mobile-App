@@ -84,6 +84,29 @@ service cloud.firestore {
           .hasOnly(['status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified', 'volunteerPhotoUrl', 'volunteerBio', 'volunteerExperience', 'volunteerRating', 'acceptedAt', 'updatedAt']);
     }
 
+    function isWithdrawal(requestId) {
+      let before = get(/databases/$(database)/documents/requests/$(requestId)).data;
+      let after = getAfter(/databases/$(database)/documents/requests/$(requestId)).data;
+      return isRole('volunteer') && before.assignedVolunteerId == request.auth.uid &&
+        before.status in ['accepted', 'scheduled'] && after.status == 'pending' &&
+        after.assignedVolunteerId == null && after.withdrawnBy == request.auth.uid &&
+        after.withdrawnAt == request.time;
+    }
+
+    function isVolunteerWithdrawal(requestId) {
+      return isWithdrawal(requestId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified',
+          'volunteerPhotoUrl', 'volunteerBio', 'volunteerExperience', 'volunteerRating',
+          'acceptedAt', 'elderConfirmedAt', 'rescheduledAt', 'withdrawnAt', 'withdrawnBy', 'updatedAt'
+        ]) && request.resource.data.volunteerName == null &&
+        request.resource.data.volunteerVerified == false &&
+        request.resource.data.volunteerPhotoUrl == null && request.resource.data.volunteerBio == null &&
+        request.resource.data.volunteerExperience == null && request.resource.data.volunteerRating == null &&
+        request.resource.data.acceptedAt == null && request.resource.data.elderConfirmedAt == null &&
+        getAfter(/databases/$(database)/documents/requestAssignments/$(requestId)).data.status == 'withdrawn';
+    }
+
     function isVolunteerProgressUpdate() {
       return isRole('volunteer') &&
         resource.data.assignedVolunteerId == request.auth.uid &&
@@ -278,12 +301,35 @@ service cloud.firestore {
             request.resource.data.status == 'cancelled' &&
             request.resource.data.cancelledBy == request.auth.uid &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledBy', 'updatedAt'])))) ||
-        isVolunteerAcceptance() || isVolunteerProgressUpdate();
+        isVolunteerAcceptance() || isVolunteerProgressUpdate() || isVolunteerWithdrawal(requestId);
       // Preserve workflow history; only admins may hard-delete requests.
       allow delete: if isAdmin();
     }
 
+    match /requestAssignmentHistory/{historyId} {
+      allow read: if isAdmin() || (isRole('volunteer') && resource.data.volunteerId == request.auth.uid);
+      allow create: if isWithdrawal(request.resource.data.requestId) &&
+        request.resource.data == getAfter(/databases/$(database)/documents/requestAssignments/$(request.resource.data.requestId)).data;
+      allow update, delete: if false;
+    }
+
     match /requestAssignments/{assignmentId} {
+      allow get: if isRole('volunteer') && resource.data.status == 'withdrawn';
+      allow create, update: if isWithdrawal(assignmentId) &&
+        request.resource.data.requestId == assignmentId &&
+        request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.status == 'withdrawn' &&
+        request.resource.data.withdrawnAt == request.time &&
+        (!exists(/databases/$(database)/documents/requestAssignments/$(assignmentId)) ||
+          (resource.data.volunteerId == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'withdrawnAt', 'updatedAt'])));
+      allow update: if isRole('volunteer') && resource.data.status == 'withdrawn' &&
+        get(/databases/$(database)/documents/requests/$(assignmentId)).data.status == 'pending' &&
+        getAfter(/databases/$(database)/documents/requests/$(assignmentId)).data.status == 'accepted' &&
+        getAfter(/databases/$(database)/documents/requests/$(assignmentId)).data.assignedVolunteerId == request.auth.uid &&
+        request.resource.data.requestId == assignmentId && request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.keys().hasOnly(['requestId', 'volunteerId', 'activityType', 'scheduledAt', 'durationMinutes', 'generalLocation', 'status', 'createdAt']);
       // A volunteer's acceptance transaction reads this doc to check whether
       // the request is already claimed, and on the first-ever acceptance it
       // doesn't exist yet. That "not found" read must itself be allowed (any
@@ -359,6 +405,16 @@ service cloud.firestore {
 
     // ---- notifications ----
     match /notifications/{notificationId} {
+      allow create: if request.resource.data.type == 'volunteer_withdrawn' &&
+        isWithdrawal(request.resource.data.requestId) &&
+        request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.read == false && request.resource.data.createdAt == request.time &&
+        ((request.resource.data.audience == 'elderly' &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy) ||
+         (request.resource.data.audience == 'caregiver' &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null) &&
+          hasAcceptedCaregiver(request.resource.data.userId,
+            get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy)));
       allow read: if isAdmin() || resource.data.userId == request.auth.uid;
       // Status alerts must point to a real request in the matching stored
       // state. Elders can create their own cancelled alert, and — once the

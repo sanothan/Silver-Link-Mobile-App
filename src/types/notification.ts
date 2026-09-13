@@ -1,6 +1,7 @@
 import type { RequestStatus } from "./request";
 
 export type NotificationType =
+  | "volunteer_withdrawn"
   | "request_accepted"
   | "request_scheduled"
   | "request_rescheduled"

@@ -11,6 +11,7 @@ import {
   writeBatch,
   type DocumentData,
   type Unsubscribe,
+  type Transaction,
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import {
@@ -55,6 +56,7 @@ function asText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 const TYPES: NotificationType[] = [
+  "volunteer_withdrawn",
   "request_accepted",
   "request_scheduled",
   "request_rescheduled",
@@ -68,6 +70,24 @@ const TYPES: NotificationType[] = [
   "volunteer_verification_approved",
   "volunteer_verification_rejected",
 ];
+
+export function writeWithdrawalNotifications(transaction: Transaction, context: {
+  requestId: string; elderlyId: string; caregiverId?: string;
+  volunteerId: string; activityType: string; eventId: string;
+}) {
+  const recipients = [{ userId: context.elderlyId, audience: "elderly" }];
+  if (context.caregiverId) recipients.push({ userId: context.caregiverId, audience: "caregiver" });
+  for (const recipient of recipients) {
+    transaction.set(doc(requireDb(), "notifications", `${context.eventId}_${recipient.userId}`), {
+      ...recipient, type: "volunteer_withdrawn", requestId: context.requestId,
+      volunteerId: context.volunteerId, read: false, createdAt: serverTimestamp(),
+      title: recipient.audience === "elderly" ? "Volunteer Withdrew" : "Volunteer Withdrawal",
+      message: recipient.audience === "elderly"
+        ? `The volunteer for your ${context.activityType} request is no longer available. We are looking for another volunteer.`
+        : "The volunteer assigned to your linked elderly user's activity has withdrawn.",
+    });
+  }
+}
 
 function fromSnapshot(snapshot: {
   id: string;

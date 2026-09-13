@@ -1,5 +1,5 @@
 export type VolunteerVerificationStatus = 'verified' | 'pending' | 'rejected' | 'unverified';
-export type VolunteerActivityStatus = 'accepted' | 'scheduled' | 'ready_to_start' | 'in_progress' | 'completed' | 'cancelled';
+export type VolunteerActivityStatus = 'accepted' | 'scheduled' | 'ready_to_start' | 'in_progress' | 'completed' | 'cancelled' | 'withdrawn';
 
 export interface VolunteerOpportunity {
   id: string;
