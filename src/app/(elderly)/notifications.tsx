@@ -24,6 +24,8 @@ function iconFor(type: AppNotification['type']) {
   switch (type) {
     case 'request_accepted': return '✓';
     case 'request_scheduled': return '◷';
+    case 'request_rescheduled': return '◷';
+    case 'activity_reminder': return '⏰';
     case 'request_started': return '▶';
     case 'request_completed': return '★';
     case 'request_cancelled': return '×';
@@ -38,6 +40,8 @@ function iconBg(type: AppNotification['type']): string {
   switch (type) {
     case 'request_accepted': return '#E0E7FF';
     case 'request_scheduled': return colors.infoLight;
+    case 'request_rescheduled': return colors.infoLight;
+    case 'activity_reminder': return colors.warningLight;
     case 'request_started': return colors.warningLight;
     case 'request_completed': return colors.successLight;
     case 'request_cancelled': return colors.errorLight;
@@ -52,6 +56,8 @@ function iconColor(type: AppNotification['type']): string {
   switch (type) {
     case 'request_accepted': return colors.primary;
     case 'request_scheduled': return colors.info;
+    case 'request_rescheduled': return colors.info;
+    case 'activity_reminder': return colors.warning;
     case 'request_started': return colors.warning;
     case 'request_completed': return colors.success;
     case 'request_cancelled': return colors.error;

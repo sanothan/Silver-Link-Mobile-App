@@ -4,6 +4,7 @@ import {
   getDocs,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -15,14 +16,21 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import {
+  dueActivityReminders,
+  type ActivityReminder,
+} from "./activityReminderService";
+import type { CompanionshipRequest } from "../types/request";
+import {
   ACCEPTANCE_NOTIFICATION_TITLE,
   ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER,
   ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER,
+  ACTIVITY_REMINDER_TITLE,
   RESCHEDULE_NOTIFICATION_TITLE,
   SCHEDULE_CONFIRMATION_TITLE,
   VOLUNTEER_VERIFICATION_APPROVED_TITLE,
   VOLUNTEER_VERIFICATION_REJECTED_TITLE,
   buildAcceptanceMessage,
+  buildActivityReminderMessage,
   buildRescheduleMessage,
   buildScheduleConfirmationMessage,
   buildStatusNotificationContent,
@@ -60,6 +68,7 @@ const TYPES: NotificationType[] = [
   "request_accepted",
   "request_scheduled",
   "request_rescheduled",
+  "activity_reminder",
   "request_started",
   "request_completed",
   "request_cancelled",
@@ -432,6 +441,62 @@ export async function createStatusNotification(
       createdAt: serverTimestamp(),
     },
   );
+}
+
+function activityReminderPayload(reminder: ActivityReminder) {
+  return {
+    userId: reminder.userId,
+    audience: reminder.audience,
+    type: "activity_reminder" as const,
+    title: ACTIVITY_REMINDER_TITLE,
+    message: buildActivityReminderMessage(reminder.context, reminder.audience),
+    requestId: reminder.context.requestId,
+    volunteerId: reminder.context.volunteerId,
+    volunteerName: reminder.context.volunteerName ?? null,
+    read: false,
+    createdAt: serverTimestamp(),
+  };
+}
+
+/**
+ * Writes every reminder that is due but not already on record, and returns how
+ * many were newly created. The existence check and the write share one
+ * transaction, so two participants opening the app at the same moment cannot
+ * both create the same reminder — and a recipient who has already read theirs
+ * never has it resurrected as unread.
+ */
+export async function createActivityReminders(
+  requests: CompanionshipRequest[],
+  now = new Date(),
+): Promise<number> {
+  const database = requireDb();
+  let created = 0;
+  for (const reminder of dueActivityReminders(requests, now)) {
+    const reference = doc(database, "notifications", reminder.notificationId);
+    const wrote = await runTransaction(database, async (transaction) => {
+      if ((await transaction.get(reference)).exists()) return false;
+      transaction.set(reference, activityReminderPayload(reminder));
+      return true;
+    });
+    if (wrote) created += 1;
+  }
+  return created;
+}
+
+/**
+ * Fire-and-forget wrapper for screens: a reminder that cannot be written — for
+ * example because another participant wrote it a moment earlier — must never
+ * break the dashboard the user actually opened.
+ */
+export async function syncActivityReminders(
+  requests: CompanionshipRequest[],
+  now = new Date(),
+): Promise<number> {
+  try {
+    return await createActivityReminders(requests, now);
+  } catch {
+    return 0;
+  }
 }
 
 export async function getNotifications(

@@ -19,6 +19,7 @@ import {
   getUnreadNotificationCount,
   markNotificationRead,
   subscribeToNotifications,
+  syncActivityReminders,
 } from '../../services/notificationService';
 import {
   REQUEST_STATUS_LABELS,
@@ -147,12 +148,17 @@ export default function ElderlyDashboardScreen() {
         getUnreadNotificationCount(user.uid),
         getCaregiverLinksForElderly(user.uid),
       ]);
-    if (requestsResult.status === 'fulfilled')
+    // The owner generates the reminders for everyone on the visit, so an
+    // elderly user who opens the app is enough to alert their volunteer and
+    // caregiver too.
+    if (requestsResult.status === 'fulfilled') {
+      void syncActivityReminders(requestsResult.value);
       setActiveRequest(
         requestsResult.value.find(
           (item) => !['completed', 'cancelled'].includes(item.status),
         ) ?? null,
       );
+    }
     if (notificationsResult.status === 'fulfilled')
       setUpdates(notificationsResult.value);
     else setUpdatesError(true);
