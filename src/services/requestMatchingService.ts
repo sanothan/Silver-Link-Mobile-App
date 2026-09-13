@@ -1,5 +1,26 @@
 import type { CompanionshipRequest } from '../types/request';
+import { normalizeActivityTypes } from '../types/request';
 import type { VolunteerAvailability } from '../types/volunteer';
+
+export function doesRequestMatchActivityInterest(
+  request: CompanionshipRequest,
+  volunteerInterests: readonly string[],
+): boolean {
+  if (request.status !== 'pending' || request.assignedVolunteerId) return false;
+  const [activity] = normalizeActivityTypes([request.activityType]);
+  return !!activity && normalizeActivityTypes(volunteerInterests).includes(activity);
+}
+
+/** Stable ranking: both, interest only, availability only, then other requests. */
+export function rankRequestsByMatch(
+  requests: CompanionshipRequest[], interests: readonly string[], availabilityIds: ReadonlySet<string>,
+): { request: CompanionshipRequest; interestMatch: boolean; availabilityMatch: boolean }[] {
+  const unique = new Map(requests.map((request) => [request.id, request]));
+  return [...unique.values()]
+    .filter((request) => request.status === 'pending' && !request.assignedVolunteerId)
+    .map((request) => ({ request, interestMatch: doesRequestMatchActivityInterest(request, interests), availabilityMatch: availabilityIds.has(request.id) }))
+    .sort((a, b) => (Number(b.interestMatch) * 2 + Number(b.availabilityMatch)) - (Number(a.interestMatch) * 2 + Number(a.availabilityMatch)));
+}
 
 /** Converts the time formats already used by request and availability forms to minutes after midnight. */
 export function timeToMinutes(value: string): number | null {

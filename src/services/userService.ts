@@ -2,6 +2,25 @@ import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firest
 import { updateProfile } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
 import type { TrustedContact, UserProfile } from '../types/user';
+import { normalizeActivityTypes } from '../types/request';
+import type { VolunteerPreferences } from '../types/volunteer';
+
+/** Profile-wide interests; availability records keep their own per-slot preferences. */
+export async function getVolunteerPreferences(uid: string): Promise<VolunteerPreferences> {
+  if (!db || auth?.currentUser?.uid !== uid) throw new Error('You are not signed in.');
+  const snapshot = await getDoc(doc(db, 'volunteerProfiles', uid));
+  return { preferredActivityTypes: normalizeActivityTypes(snapshot.data()?.preferredActivityTypes) };
+}
+
+export async function saveVolunteerInterests(uid: string, interests: string[]): Promise<void> {
+  if (!db || auth?.currentUser?.uid !== uid) throw new Error('You are not signed in.');
+  const profile = await getUserProfile(uid);
+  if (profile.role !== 'volunteer' || profile.status === 'suspended')
+    throw new Error('Only volunteers can save activity interests.');
+  await setDoc(doc(db, 'volunteerProfiles', uid), {
+    preferredActivityTypes: normalizeActivityTypes(interests), updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
 
 export type ProfileIssue = 'missing-profile' | 'invalid-role' | 'invalid-status' | 'load-failed';
 

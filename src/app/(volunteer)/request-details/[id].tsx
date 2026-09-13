@@ -3,7 +3,8 @@ import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../context/AuthContext';
-import { getMatchingRequestIds } from '../../../services/requestMatchingService';
+import { doesRequestMatchActivityInterest, getMatchingRequestIds } from '../../../services/requestMatchingService';
+import { getVolunteerPreferences } from '../../../services/userService';
 import { acceptRequest, getRequestForVolunteerView, RequestAcceptanceError, RequestWithdrawalError, withdrawFromActivity, updateAssignedRequestStatus } from '../../../services/requestService';
 import { getVolunteerAvailability } from '../../../services/volunteerAvailabilityService';
 import { colors } from '../../../theme/colors';
@@ -16,10 +17,24 @@ export default function VolunteerRequestDetails() {
   const router = useRouter();
   const [item, setItem] = useState<CompanionshipRequest | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(false);
   const [matchesAvailability, setMatchesAvailability] = useState<boolean | null>(null);
+  const [interests, setInterests] = useState<string[]>([]);
+  const [interestsError, setInterestsError] = useState(false);
   const [saving, setSaving] = useState(false);
   const withdrawing = useRef(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const load = useCallback(async () => { if (!user || !id) return; setLoading(true); setError(false); try { const request = await getRequestForVolunteerView(id, user.uid); setItem(request); const availability = await getVolunteerAvailability(user.uid).catch(() => null); setMatchesAvailability(availability ? getMatchingRequestIds([request], availability).has(request.id) : null); } catch { setError(true); } finally { setLoading(false); } }, [id, user]);
+  const load = useCallback(async () => {
+    if (!user || !id) return;
+    setLoading(true); setError(false); setInterestsError(false);
+    const [requestResult, availabilityResult, interestResult] = await Promise.allSettled([
+      getRequestForVolunteerView(id, user.uid), getVolunteerAvailability(user.uid), getVolunteerPreferences(user.uid),
+    ]);
+    if (requestResult.status === 'fulfilled') {
+      setItem(requestResult.value);
+      setMatchesAvailability(availabilityResult.status === 'fulfilled' ? getMatchingRequestIds([requestResult.value], availabilityResult.value).has(id) : null);
+    } else { setItem(null); setError(true); }
+    setInterests(interestResult.status === 'fulfilled' ? interestResult.value.preferredActivityTypes : []);
+    setInterestsError(interestResult.status === 'rejected'); setLoading(false);
+  }, [id, user]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   const advance = async (nextStatus: 'in_progress' | 'completed') => {
     if (!user || !id) return; setSaving(true);
@@ -80,6 +95,8 @@ export default function VolunteerRequestDetails() {
       <Section label="Date and time" value={`${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}`} />
       <Section label="Duration" value={item.durationLabel || (item.durationMinutes ? `${item.durationMinutes} minutes` : 'Flexible')} />
       <Section label="Location" value={item.location} />
+      {isOpen && doesRequestMatchActivityInterest(item, interests) ? <View style={[styles.availabilityStatus, styles.availabilityMatch]}><Text style={[styles.availabilityStatusText, styles.availabilityMatchText]}>✓ This activity matches one of your interests.</Text></View> : null}
+      {isOpen && interestsError ? <View style={styles.card}><Text style={styles.body}>We couldn&apos;t load your activity interests. Please try again.</Text><Pressable accessibilityRole="button" style={styles.back} onPress={() => void load()}><Text style={styles.link}>Try Again</Text></Pressable></View> : null}
       {isOpen && matchesAvailability !== null ? <View accessibilityRole="text" style={[styles.availabilityStatus, matchesAvailability ? styles.availabilityMatch : styles.availabilityOutside]}><Text style={[styles.availabilityStatusText, matchesAvailability ? styles.availabilityMatchText : styles.availabilityOutsideText]}>{matchesAvailability ? '✓ This request fits your current availability.' : 'This request is outside your saved availability.'}</Text></View> : null}
       {isMine && item.createdByName ? <View style={styles.card}><Text style={styles.label}>REQUESTED BY</Text><Text style={styles.value}>{item.createdByName}</Text></View> : null}
       {isOpen ? <Pressable accessibilityRole="button" accessibilityLabel="Accept this request" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={confirmAccept}><Text style={styles.actionText}>{saving ? 'Accepting…' : 'Accept Request'}</Text></Pressable> : null}

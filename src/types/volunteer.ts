@@ -1,3 +1,9 @@
+import { REQUEST_ACTIVITY_TYPES, type RequestActivityType } from './request';
+
+export interface VolunteerPreferences {
+  preferredActivityTypes: RequestActivityType[];
+}
+
 export type VolunteerVerificationStatus = 'verified' | 'pending' | 'rejected' | 'unverified';
 export type VolunteerActivityStatus = 'accepted' | 'scheduled' | 'ready_to_start' | 'in_progress' | 'completed' | 'cancelled' | 'withdrawn';
 
@@ -15,7 +21,7 @@ export interface VolunteerActivity extends VolunteerOpportunity {
   status: VolunteerActivityStatus;
 }
 
-export const VOLUNTEER_ACTIVITY_TYPES = ['Friendly Conversation', 'Walking Companionship', 'Smartphone Help', 'Grocery Collection', 'Medicine Collection', 'Online Service Help', 'Community / Appointment Support'] as const;
+export const VOLUNTEER_ACTIVITY_TYPES = REQUEST_ACTIVITY_TYPES;
 export const VOLUNTEER_DURATION_PREFERENCES = ['30 minutes', '30–60 minutes', '1–2 hours', 'More than 2 hours', 'Flexible'] as const;
 
 export interface VolunteerAvailability {

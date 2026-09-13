@@ -10,6 +10,16 @@ export const REQUEST_ACTIVITY_TYPES = [
   "Other",
 ] as const;
 
+export type RequestActivityType = typeof REQUEST_ACTIVITY_TYPES[number];
+
+/** Accept legacy capitalization/whitespace, but never guess a different activity. */
+export function normalizeActivityTypes(values: unknown): RequestActivityType[] {
+  if (!Array.isArray(values)) return [];
+  const normalized = values.filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim().toLowerCase());
+  return REQUEST_ACTIVITY_TYPES.filter((activity) => normalized.includes(activity.toLowerCase()));
+}
+
 /** The canonical duration options a request can be created and filtered with. */
 export const REQUEST_DURATION_OPTIONS = [
   { label: "30 minutes", minutes: 30 },
