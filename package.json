@@ -46,7 +46,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "jest"
+    "test": "jest",
+    "firebase": "npx --yes firebase-tools@^14",
+    "deploy:rules": "npx --yes firebase-tools@^14 deploy --only firestore:rules"
   },
   "private": true,
   "jest": {
