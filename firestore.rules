@@ -444,6 +444,25 @@ service cloud.firestore {
           ((request.resource.data.type == 'request_accepted' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'accepted') ||
            (request.resource.data.type == 'request_started' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'in_progress') ||
            (request.resource.data.type == 'request_completed' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed'))));
+      // Upcoming-visit reminders. Either participant of a scheduled visit may
+      // generate them for the whole party — the elder, the assigned
+      // volunteer, and the linked caregiver — but only while the request is
+      // still stored as 'scheduled', so a cancelled visit can never remind
+      // anyone. Reminder ids are deterministic and these documents are never
+      // updated except to mark them read, so a repeated pass overwrites
+      // nothing new rather than stacking duplicates.
+      allow create: if hasPlatformAccess() && request.resource.data.read == false &&
+        request.resource.data.type == 'activity_reminder' &&
+        request.resource.data.requestId is string &&
+        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'scheduled' &&
+        (get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid ||
+         get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid) &&
+        request.resource.data.userId in [
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy,
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId,
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null)
+        ];
       allow create: if hasPlatformAccess() && request.resource.data.read == false &&
         request.resource.data.linkId is string &&
         exists(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)) &&

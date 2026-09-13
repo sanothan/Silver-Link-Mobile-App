@@ -5,6 +5,7 @@ export type NotificationType =
   | "request_accepted"
   | "request_scheduled"
   | "request_rescheduled"
+  | "activity_reminder"
   | "request_started"
   | "request_completed"
   | "request_cancelled"
@@ -176,6 +177,52 @@ export function buildRescheduleMessage(
   if (audience === "volunteer")
     return `Your ${context.activityType} visit has been rescheduled to ${when}.`;
   return `Your ${context.activityType} activity has been rescheduled to ${when}.`;
+}
+
+export const ACTIVITY_REMINDER_TITLE = "Upcoming Visit Reminder";
+
+export interface ActivityReminderContext {
+  elderlyId: string;
+  elderlyName?: string;
+  caregiverId?: string;
+  requestId: string;
+  activityType: string;
+  preferredDate: Date;
+  preferredTime: string;
+  volunteerId: string;
+  volunteerName?: string;
+}
+
+/**
+ * Reminders always spell out the weekday, the date, and the start time, so a
+ * recipient never has to open the request to know when the visit is.
+ */
+function reminderWhenLabel(date: Date, time: string): string {
+  const day = new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+  return time ? `${day} at ${time}` : day;
+}
+
+export function buildActivityReminderMessage(
+  context: ActivityReminderContext,
+  audience: NotificationAudience,
+): string {
+  const when = reminderWhenLabel(context.preferredDate, context.preferredTime);
+  const withVolunteer = context.volunteerName
+    ? ` with ${context.volunteerName}`
+    : "";
+  if (audience === "caregiver") {
+    const owner = context.elderlyName
+      ? `${context.elderlyName}'s`
+      : "Your linked family member's";
+    return `Reminder: ${owner} ${context.activityType} visit${withVolunteer} is coming up on ${when}.`;
+  }
+  if (audience === "volunteer")
+    return `Reminder: your ${context.activityType} visit is coming up on ${when}. Please be ready on time.`;
+  return `Reminder: your ${context.activityType} visit${withVolunteer} is coming up on ${when}.`;
 }
 
 export function notificationTypeForStatus(
