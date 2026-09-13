@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getCurrentViewer } from '../services/currentUser';
 import { ReportAccessError, isAdmin } from '../services/reportAccess';
 import type { ReportViewer } from '../services/reportAccess';
-import { getReportsForAdmin, updateReportStatus } from '../services/reportService';
+import { getReportsForAdmin } from '../services/reportService';
 import { colors } from '../theme/Colors';
 import { REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from '../types/report';
 import type { ReportRecord, ReportStatus } from '../types/report';
@@ -17,15 +18,16 @@ const FILTERS: { value: ReportStatus | 'all'; label: string }[] = [
   { value: 'open', label: 'Open' },
   { value: 'under_review', label: 'Under review' },
   { value: 'resolved', label: 'Resolved' },
+  { value: 'dismissed', label: 'Dismissed' },
   { value: 'all', label: 'All' },
 ];
 
 export default function AdminReportsScreen() {
+  const router = useRouter();
   const [state, setState] = useState<LoadState>('loading');
   const [viewer, setViewer] = useState<ReportViewer | null>(null);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [filter, setFilter] = useState<ReportStatus | 'all'>('open');
-  const [workingId, setWorkingId] = useState<string | null>(null);
 
   const load = useCallback(async (current: ReportViewer | null, status: ReportStatus | 'all') => {
     setState('loading');
@@ -54,23 +56,16 @@ export default function AdminReportsScreen() {
     };
   }, [filter, load]);
 
-  const changeStatus = useCallback(
-    async (report: ReportRecord, status: ReportStatus) => {
-      setWorkingId(report.id);
-      try {
-        await updateReportStatus(viewer, report.id, status);
-        setReports((current) =>
-          filter === 'all'
-            ? current.map((item) => (item.id === report.id ? { ...item, status } : item))
-            : current.filter((item) => item.id !== report.id),
-        );
-      } catch {
-        Alert.alert('Action failed', 'Could not update this report. Please try again.');
-      } finally {
-        setWorkingId(null);
+  // Returning from the detail screen should show the status the administrator just saved.
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
       }
-    },
-    [filter, viewer],
+      if (isAdmin(viewer)) void load(viewer, filter);
+    }, [filter, load, viewer]),
   );
 
   if (state === 'denied') {
@@ -141,7 +136,13 @@ export default function AdminReportsScreen() {
         ) : (
           <View style={styles.cards}>
             {reports.map((report) => (
-              <View key={report.id} style={[styles.card, report.urgent && styles.cardUrgent]}>
+              <Pressable
+                key={report.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Review report: ${REPORT_CATEGORY_LABEL[report.category]}, ${REPORT_STATUS_LABEL[report.status]}`}
+                style={[styles.card, report.urgent && styles.cardUrgent]}
+                onPress={() => router.push({ pathname: '/admin-report-detail', params: { id: report.id } })}
+              >
                 <View style={styles.cardTop}>
                   <Text style={styles.cardTitle}>{REPORT_CATEGORY_LABEL[report.category]}</Text>
                   <View style={[styles.badge, report.urgent ? styles.badgeUrgent : styles.badgeNormal]}>
@@ -163,33 +164,18 @@ export default function AdminReportsScreen() {
                   </Text>
                 )}
 
-                <Text style={styles.message}>{report.description || 'No description provided.'}</Text>
+                <Text style={styles.message} numberOfLines={3}>
+                  {report.description || 'No description provided.'}
+                </Text>
 
-                <View style={styles.actionRow}>
-                  {report.status !== 'under_review' && report.status !== 'resolved' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      style={[styles.secondaryButton, workingId === report.id && styles.buttonDisabled]}
-                      onPress={() => void changeStatus(report, 'under_review')}
-                      disabled={workingId === report.id}
-                    >
-                      <Text style={styles.secondaryButtonText}>Start review</Text>
-                    </Pressable>
-                  ) : null}
-                  {report.status !== 'resolved' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      style={[styles.primaryButton, workingId === report.id && styles.buttonDisabled]}
-                      onPress={() => void changeStatus(report, 'resolved')}
-                      disabled={workingId === report.id}
-                    >
-                      <Text style={styles.primaryButtonText}>
-                        {workingId === report.id ? 'Saving...' : 'Mark resolved'}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
+                {report.adminNote ? (
+                  <Text style={styles.noteLine} numberOfLines={2}>
+                    Latest note: {report.adminNote}
+                  </Text>
+                ) : null}
+
+                <Text style={styles.openLink}>Review and update &rsaquo;</Text>
+              </Pressable>
             ))}
           </View>
         )}
@@ -243,28 +229,8 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 12, fontWeight: '800' },
   badgeTextUrgent: { color: colors.textOnPrimary },
   badgeTextNormal: { color: colors.textSecondary },
-  actionRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  primaryButton: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonText: { color: colors.textOnPrimary, fontSize: 14, fontWeight: '800' },
-  secondaryButton: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButtonText: { color: colors.primary, fontSize: 14, fontWeight: '800' },
-  buttonDisabled: { opacity: 0.6 },
+  noteLine: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 8, fontStyle: 'italic' },
+  openLink: { color: colors.primary, fontSize: 14, lineHeight: 20, fontWeight: '800', marginTop: 12 },
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: 18,

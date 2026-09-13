@@ -21,7 +21,8 @@ export function canListAllReports(viewer: ReportViewer | null): boolean {
   return isAdmin(viewer);
 }
 
-export function assertCanListAllReports(viewer: ReportViewer | null): void {
+/** Narrows the viewer to a signed-in administrator, so callers can rely on their uid. */
+export function assertCanListAllReports(viewer: ReportViewer | null): asserts viewer is ReportViewer {
   if (!canListAllReports(viewer)) throw new ReportAccessError();
 }
 
