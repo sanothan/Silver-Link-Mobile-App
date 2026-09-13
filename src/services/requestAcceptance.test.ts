@@ -1,10 +1,10 @@
-import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getRequestsForLinkedElderlyUser, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus } from './requestService';
+import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getRequestsForLinkedElderlyUser, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus, withdrawFromActivity } from './requestService';
 import { createAcceptanceNotifications, createScheduleConfirmationNotifications, createStatusNotification } from './notificationService';
 import { getUserProfile } from './userService';
 import type { UserProfile } from '../types/user';
 
-jest.mock('./firebaseConfig', () => ({ db: { id: 'test-db' } }));
-jest.mock('./notificationService', () => ({ createAcceptanceNotifications: jest.fn(async () => undefined), createScheduleConfirmationNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
+jest.mock('./firebaseConfig', () => ({ db: { id: 'test-db' }, auth: { currentUser: { uid: 'vol-a' } } }));
+jest.mock('./notificationService', () => ({ ...jest.requireActual('./notificationService'), createAcceptanceNotifications: jest.fn(async () => undefined), createScheduleConfirmationNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
 jest.mock('./userService', () => ({ getUserProfile: jest.fn() }));
 
 /**
@@ -31,7 +31,10 @@ jest.mock('firebase/firestore', () => {
     store.set(path, { data: merge ? { ...existing?.data, ...data } : { ...data }, version: (existing?.version ?? 0) + 1 });
   };
 
-  const doc = (_db: unknown, col: string, id: string) => ({ path: `${col}/${id}`, id, col });
+  const doc = (base: unknown, col?: string, id?: string) => {
+    if (!col) { col = (base as { col: string }).col; id = `auto-${++autoId}`; }
+    return { path: `${col}/${id}`, id, col };
+  };
   const collection = (_db: unknown, col: string) => ({ col });
   const where = (field: string, op: string, value: unknown) => ({ kind: 'where' as const, field, op, value });
   const limit = (count: number) => ({ kind: 'limit' as const, count });
@@ -388,5 +391,60 @@ describe('caregiver activity tracking', () => {
     expect(requests.map((item) => item.id)).toEqual(['cancelled-1', 'completed-1']);
     expect(requests[0]).toMatchObject({ status: 'cancelled', cancelledAt: new Date(2026, 7, 29) });
     expect(requests[1]).toMatchObject({ status: 'completed', completedAt: new Date(2026, 7, 28) });
+  });
+});
+
+describe('volunteer withdrawal', () => {
+  it.each(['accepted', 'scheduled'])('reopens %s activities atomically and allows reassignment', async (status) => {
+    seedRequest('withdraw');
+    await acceptRequest('withdraw', 'vol-a');
+    const row = firestore.__store.get('requests/withdraw')!;
+    row.data.status = status;
+    await withdrawFromActivity('withdraw', 'vol-a');
+    expect(requestData('withdraw')).toMatchObject({ status: 'pending', assignedVolunteerId: null, volunteerName: null, elderConfirmedAt: null, createdBy: 'elderly-1' });
+    expect(assignmentData('withdraw')?.status).toBe('withdrawn');
+    expect((await getVolunteerRequests('vol-a'))).toHaveLength(0);
+    expect((await getOpenRequests()).map((item) => item.id)).toContain('withdraw');
+    const notifications = [...firestore.__store.entries()].filter(([key]) => key.startsWith('notifications/'));
+    expect(notifications).toHaveLength(2);
+    expect(notifications.map(([, value]) => value.data.title)).toEqual(['Volunteer Withdrew', 'Volunteer Withdrawal']);
+    await expect(withdrawFromActivity('withdraw', 'vol-a')).rejects.toThrow('already been updated');
+    await acceptRequest('withdraw', 'vol-b');
+    expect(assignmentData('withdraw')?.volunteerId).toBe('vol-b');
+    expect([...firestore.__store.keys()].filter((key) => key.startsWith('requestAssignmentHistory/'))).toHaveLength(1);
+  });
+
+  it.each(['in_progress', 'completed', 'cancelled', 'pending'])('blocks %s activities', async (status) => {
+    seedRequest('withdraw', { status, assignedVolunteerId: 'vol-a' });
+    await expect(withdrawFromActivity('withdraw', 'vol-a')).rejects.toThrow();
+    expect(requestData('withdraw')?.status).toBe(status);
+  });
+
+  it('rejects another volunteer and non-volunteer accounts', async () => {
+    seedRequest('withdraw', { status: 'accepted', assignedVolunteerId: 'vol-b' });
+    await expect(withdrawFromActivity('withdraw', 'vol-a')).rejects.toThrow('already been updated');
+    await expect(withdrawFromActivity('withdraw', 'elderly-1')).rejects.toThrow('Only the assigned volunteer');
+  });
+
+  it('handles concurrent withdrawals without duplicate history or alerts', async () => {
+    seedRequest('withdraw');
+    await acceptRequest('withdraw', 'vol-a');
+    const results = await Promise.allSettled([withdrawFromActivity('withdraw', 'vol-a'), withdrawFromActivity('withdraw', 'vol-a')]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect([...firestore.__store.keys()].filter((key) => key.startsWith('notifications/'))).toHaveLength(2);
+  });
+
+  it('rechecks eligibility when the activity starts during withdrawal', async () => {
+    seedRequest('withdraw');
+    await acceptRequest('withdraw', 'vol-a');
+    firestore.__hooks.afterRead = (path) => {
+      if (path !== 'requests/withdraw') return;
+      firestore.__hooks.afterRead = undefined;
+      const row = firestore.__store.get(path)!;
+      firestore.__store.set(path, { data: { ...row.data, status: 'in_progress' }, version: row.version + 1 });
+    };
+    await expect(withdrawFromActivity('withdraw', 'vol-a')).rejects.toThrow('already started');
+    expect(assignmentData('withdraw')?.status).toBe('accepted');
+    expect([...firestore.__store.keys()].filter((key) => key.startsWith('notifications/'))).toHaveLength(0);
   });
 });

@@ -18,12 +18,13 @@ import type {
     RequestFormValues,
     RequestStatus,
 } from "../types/request";
-import { db } from "./firebaseConfig";
+import { auth, db } from "./firebaseConfig";
 import {
     createAcceptanceNotifications,
     createRescheduleNotifications,
     createScheduleConfirmationNotifications,
     createStatusNotification,
+    writeWithdrawalNotifications,
 } from "./notificationService";
 import { getUserProfile } from "./userService";
 
@@ -356,7 +357,7 @@ export async function acceptRequest(
 
     if (current.createdBy === volunteer.uid)
       throw new RequestAcceptanceError("own-request");
-    if (current.assignedVolunteerId || existingAssignment.exists())
+    if (current.assignedVolunteerId || (existingAssignment.exists() && existingAssignment.data()?.status !== "withdrawn"))
       throw new RequestAcceptanceError("already-accepted");
     if (current.status !== "pending")
       throw new RequestAcceptanceError(
@@ -421,6 +422,49 @@ export async function acceptRequest(
     volunteerExperience: volunteer.experience,
     volunteerRating: volunteer.rating,
   };
+}
+
+export class RequestWithdrawalError extends Error {}
+
+export async function withdrawFromActivity(requestId: string, volunteerUid: string): Promise<void> {
+  const database = requireDb();
+  const profile = await getUserProfile(volunteerUid);
+  if (auth?.currentUser?.uid !== volunteerUid || profile?.role !== "volunteer" || profile.status === "suspended")
+    throw new RequestWithdrawalError("Only the assigned volunteer can withdraw from this activity.");
+  const requestRef = doc(database, "requests", requestId);
+  const assignment = assignmentRef(database, requestId);
+  const history = doc(collection(database, "requestAssignmentHistory"));
+  await runTransaction(database, async (transaction) => {
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists()) throw new RequestWithdrawalError("This activity has already been updated.");
+    const current = fromSnapshot(snapshot);
+    if (current.assignedVolunteerId !== volunteerUid)
+      throw new RequestWithdrawalError("This activity has already been updated.");
+    if (current.status === "in_progress")
+      throw new RequestWithdrawalError("This activity has already started and can no longer be withdrawn.");
+    if (!["accepted", "scheduled"].includes(current.status))
+      throw new RequestWithdrawalError("This activity can no longer be withdrawn.");
+    const previous = await transaction.get(assignment);
+    if (previous.exists() && previous.data().volunteerId !== volunteerUid)
+      throw new RequestWithdrawalError("This activity has already been updated.");
+    transaction.update(requestRef, {
+      status: "pending", assignedVolunteerId: null,
+      volunteerName: null, volunteerVerified: false, volunteerPhotoUrl: null,
+      volunteerBio: null, volunteerExperience: null, volunteerRating: null,
+      acceptedAt: null, elderConfirmedAt: null, rescheduledAt: null,
+      withdrawnAt: serverTimestamp(), withdrawnBy: volunteerUid, updatedAt: serverTimestamp(),
+    });
+    const withdrawnAssignment = {
+      ...(previous.data() ?? { requestId, volunteerId: volunteerUid }),
+      status: "withdrawn", withdrawnAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    };
+    transaction.set(assignment, withdrawnAssignment);
+    transaction.set(history, { ...withdrawnAssignment, requestId, volunteerId: volunteerUid });
+    writeWithdrawalNotifications(transaction, {
+      requestId, elderlyId: current.createdBy, caregiverId: current.caregiverId,
+      volunteerId: volunteerUid, activityType: current.activityType, eventId: history.id,
+    });
+  });
 }
 
 export async function confirmAssignedVolunteer(

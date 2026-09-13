@@ -1,10 +1,10 @@
 import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../context/AuthContext';
 import { getMatchingRequestIds } from '../../../services/requestMatchingService';
-import { acceptRequest, getRequestForVolunteerView, RequestAcceptanceError, updateAssignedRequestStatus } from '../../../services/requestService';
+import { acceptRequest, getRequestForVolunteerView, RequestAcceptanceError, RequestWithdrawalError, withdrawFromActivity, updateAssignedRequestStatus } from '../../../services/requestService';
 import { getVolunteerAvailability } from '../../../services/volunteerAvailabilityService';
 import { colors } from '../../../theme/colors';
 import { canChatForStatus } from '../../../types/chat';
@@ -17,6 +17,8 @@ export default function VolunteerRequestDetails() {
   const [item, setItem] = useState<CompanionshipRequest | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(false);
   const [matchesAvailability, setMatchesAvailability] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+  const withdrawing = useRef(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const load = useCallback(async () => { if (!user || !id) return; setLoading(true); setError(false); try { const request = await getRequestForVolunteerView(id, user.uid); setItem(request); const availability = await getVolunteerAvailability(user.uid).catch(() => null); setMatchesAvailability(availability ? getMatchingRequestIds([request], availability).has(request.id) : null); } catch { setError(true); } finally { setLoading(false); } }, [id, user]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   const advance = async (nextStatus: 'in_progress' | 'completed') => {
@@ -41,6 +43,28 @@ export default function VolunteerRequestDetails() {
   };
   const confirmAccept = () => item && Alert.alert('Accept this request?', `${item.activityType} on ${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}.`, [{ text: 'Not now', style: 'cancel' }, { text: 'Accept', onPress: () => void accept() }]);
 
+  const withdraw = async () => {
+    if (!user || !id || withdrawing.current || saving) return;
+    withdrawing.current = true;
+    setIsWithdrawing(true);
+    setSaving(true);
+    try {
+      await withdrawFromActivity(id, user.uid);
+      router.replace('/(volunteer)/activities');
+      Alert.alert('Withdrawal Confirmed', 'You have been removed from this activity.');
+    } catch (cause) {
+      Alert.alert("We couldn't withdraw from this activity", cause instanceof RequestWithdrawalError ? cause.message : 'Please try again.');
+      await load();
+    } finally {
+      withdrawing.current = false;
+      setIsWithdrawing(false);
+      setSaving(false);
+    }
+  };
+  const confirmWithdrawal = () => Alert.alert('Withdraw from this activity?',
+    'The elderly user will be informed and the request may become available to other volunteers again.',
+    [{ text: 'Keep Activity', style: 'cancel' }, { text: 'Withdraw', style: 'destructive', onPress: () => void withdraw() }]);
+
   if (loading) return <Center><ActivityIndicator size="large" color={colors.primary} /></Center>;
   if (error || !item) return <Center><Text style={styles.title}>Request unavailable</Text><Text style={styles.body}>It may not exist, or it may no longer be available.</Text></Center>;
 
@@ -62,6 +86,10 @@ export default function VolunteerRequestDetails() {
       {isMine && item.status === 'scheduled' ? <Pressable accessibilityRole="button" accessibilityLabel="Start this visit" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('in_progress')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Start Visit'}</Text></Pressable> : null}
       {isMine && item.status === 'in_progress' ? <Pressable accessibilityRole="button" accessibilityLabel="Mark this visit completed" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('completed')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Complete Visit'}</Text></Pressable> : null}
       {isMine && item.caregiverId && canChatForStatus(item.status) ? <Pressable accessibilityRole="button" accessibilityLabel="Message caregiver" style={styles.chatAction} onPress={() => router.push(`/(volunteer)/request-chat/${item.id}` as Href)}><Text style={styles.chatActionText}>Message Caregiver</Text></Pressable> : null}
+      {isMine && ['accepted', 'scheduled'].includes(item.status) ? <Pressable accessibilityRole="button" accessibilityLabel="Withdraw From Activity" disabled={saving} onPress={confirmWithdrawal} style={[styles.chatAction, { borderColor: colors.error }, saving && styles.disabled]}>
+        {isWithdrawing ? <ActivityIndicator color={colors.error} /> : null}
+        <Text style={[styles.chatActionText, { color: colors.error }]}>{isWithdrawing ? 'Withdrawing...' : 'Withdraw From Activity'}</Text>
+      </Pressable> : null}
     </ScrollView>
   </SafeAreaView>;
 }
