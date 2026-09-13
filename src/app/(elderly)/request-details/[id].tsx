@@ -27,6 +27,7 @@ import {
   confirmAssignedVolunteer,
   getRequestById,
 } from "../../../services/requestService";
+import { getActivityReview } from "../../../services/reviewService";
 import { colors } from "../../../theme/colors";
 import {
   CANCELLABLE_REQUEST_STATUSES,
@@ -43,12 +44,18 @@ export default function RequestDetails() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [hasReview, setHasReview] = useState(false);
   const load = useCallback(async () => {
     if (!user || !id) return;
     setLoading(true);
     setError(false);
     try {
-      setItem(await getRequestById(id, user.uid));
+      const request = await getRequestById(id, user.uid);
+      setItem(request);
+      const review = request.status === "completed"
+        ? await getActivityReview(id, user.uid).catch(() => null)
+        : null;
+      setHasReview(Boolean(review));
     } catch {
       setError(true);
     } finally {
@@ -133,6 +140,23 @@ export default function RequestDetails() {
             </View>
           </View>
           <Timeline status={item.status} />
+          {["accepted", "scheduled"].includes(item.status) ? (
+            <View style={[styles.card, styles.scheduleCard]}>
+              <Text style={styles.timelineTitle}>Scheduled Activity</Text>
+              <Text style={styles.scheduleActivity}>{item.activityType}</Text>
+              <Text style={styles.cardValue}>
+                {item.preferredDate.toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })} at {item.preferredTime}
+              </Text>
+              <Text style={styles.body}>
+                {item.durationLabel || (item.durationMinutes ? `${item.durationMinutes} minutes` : "Flexible")}
+              </Text>
+              {item.volunteerName ? <Text style={styles.body}>Volunteer: {item.volunteerName}</Text> : null}
+            </View>
+          ) : null}
           {item.volunteerName ? (
             <VolunteerCard
               item={item}
@@ -180,7 +204,18 @@ export default function RequestDetails() {
                   router.push(`/(elderly)/edit-request/${item.id}` as Href)
                 }
               >
-                <Text style={styles.primaryText}>Edit Request</Text>
+                <Text style={styles.primaryText}>
+                  {item.status === "scheduled" ? "Reschedule Visit" : "Edit Request"}
+                </Text>
+              </Pressable>
+            ) : null}
+            {item.status === "completed" && item.assignedVolunteerId ? (
+              <Pressable
+                accessibilityRole="button"
+                style={styles.primary}
+                onPress={() => router.push(`/(elderly)/activity-review/${item.id}` as Href)}
+              >
+                <Text style={styles.primaryText}>{hasReview ? "View Feedback" : "Give Feedback"}</Text>
               </Pressable>
             ) : null}
             {CANCELLABLE_REQUEST_STATUSES.includes(item.status) ? (
@@ -392,6 +427,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   waitingCard: { backgroundColor: colors.primaryLight, borderColor: "#C7D2FE" },
+  scheduleCard: { backgroundColor: colors.infoLight, borderColor: "#BAE6FD" },
+  scheduleActivity: { color: colors.textPrimary, fontSize: 18, fontWeight: "900" },
   waitingTitle: { color: colors.primaryDark, fontSize: 17, fontWeight: "900" },
   volunteerCard: {
     backgroundColor: colors.successLight,

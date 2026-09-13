@@ -3,12 +3,16 @@ import type { RequestStatus } from "./request";
 export type NotificationType =
   | "request_accepted"
   | "request_scheduled"
+  | "request_rescheduled"
   | "request_started"
   | "request_completed"
   | "request_cancelled"
   | "caregiver_link_request"
   | "caregiver_link_accepted"
-  | "caregiver_link_rejected";
+  | "caregiver_link_rejected"
+  | "chat_message"
+  | "volunteer_verification_approved"
+  | "volunteer_verification_rejected";
 export type NotificationAudience = "elderly" | "caregiver" | "volunteer";
 
 export interface AppNotification {
@@ -19,6 +23,8 @@ export interface AppNotification {
   title: string;
   message: string;
   requestId?: string;
+  chatId?: string;
+  senderId?: string;
   linkId?: string;
   volunteerId?: string;
   volunteerName?: string;
@@ -40,6 +46,36 @@ export interface CaregiverLinkDecisionNotificationContext {
   elderlyUserId: string;
   elderlyName: string;
   decision: "accepted" | "rejected";
+}
+
+export interface VolunteerVerificationNotificationContext {
+  volunteerId: string;
+  volunteerName?: string;
+  decision: "approved" | "rejected";
+  note?: string;
+}
+
+export interface ChatMessageNotificationContext {
+  requestId: string;
+  messageId: string;
+  recipientId: string;
+  senderId: string;
+  senderRole: "caregiver" | "volunteer";
+  activityType: string;
+}
+
+export const VOLUNTEER_VERIFICATION_APPROVED_TITLE = "Verification Approved";
+export const VOLUNTEER_VERIFICATION_REJECTED_TITLE = "Verification Not Approved";
+
+export function buildVolunteerVerificationMessage(
+  context: VolunteerVerificationNotificationContext,
+): string {
+  const reason = context.note?.trim() ? ` Reason: ${context.note.trim()}` : "";
+  return context.decision === "approved"
+    ? "An administrator has verified your volunteer profile. You can now accept companionship requests." +
+        reason
+    : "An administrator reviewed your volunteer profile and could not approve it at this time." +
+        reason;
 }
 
 export interface AcceptanceNotificationContext {
@@ -107,6 +143,7 @@ export const ACCEPTANCE_NOTIFICATION_TITLE = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER = "Request Accepted";
 export const SCHEDULE_CONFIRMATION_TITLE = "Visit Scheduled";
+export const RESCHEDULE_NOTIFICATION_TITLE = "Visit Rescheduled";
 
 export function buildScheduleConfirmationMessage(
   context: ScheduleConfirmationContext,
@@ -122,6 +159,22 @@ export function buildScheduleConfirmationMessage(
   if (audience === "volunteer")
     return `Your ${context.activityType} visit is confirmed for ${when}.`;
   return `Your visit with ${context.volunteerName} has been scheduled for ${when}.`;
+}
+
+export function buildRescheduleMessage(
+  context: ScheduleConfirmationContext,
+  audience: NotificationAudience,
+): string {
+  const when = whenLabel(context.preferredDate, context.preferredTime);
+  if (audience === "caregiver") {
+    const owner = context.elderlyName
+      ? `${context.elderlyName}'s`
+      : "Your linked family member's";
+    return `${owner} ${context.activityType} visit has been rescheduled to ${when}.`;
+  }
+  if (audience === "volunteer")
+    return `Your ${context.activityType} visit has been rescheduled to ${when}.`;
+  return `Your ${context.activityType} activity has been rescheduled to ${when}.`;
 }
 
 export function notificationTypeForStatus(

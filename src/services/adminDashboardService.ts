@@ -1,4 +1,4 @@
-import { collection, getDocs, doc, query, updateDoc, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { getOpenReports } from './reportService';
 import type { ActionItem, AdminDashboardData, AdminDashboardStats, AdminRequestRow, AdminUserRow, PendingVolunteer } from '../types/admin';
@@ -69,10 +69,9 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
   return { stats, pendingVolunteers, actionItems };
 }
 
-export async function approveVolunteer(uid: string): Promise<void> {
-  if (!db) throw new Error('Firebase is not configured.');
-  await updateDoc(doc(db, 'users', uid), { status: 'active' });
-}
+// Volunteer approval lives in volunteerVerificationService, which also writes
+// the audit entry and notifies the volunteer; there is deliberately no second,
+// untraceable approval path here.
 
 export async function listRequests(): Promise<AdminRequestRow[]> {
   if (!db) throw new Error('Firebase is not configured.');

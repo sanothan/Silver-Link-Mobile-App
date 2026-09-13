@@ -285,6 +285,22 @@ export default function CaregiverDashboardScreen() {
     });
   };
 
+  const handleViewTrustedContact = (elderlyUserId: string) => {
+    router.push({
+      pathname: "caregiver-trusted-contact" as any,
+      params: { elderlyUserId },
+    });
+  };
+
+  const handleViewVisits = () => {
+    const linked = caregiverLinks.find((link) => link.status === "accepted");
+    if (linked) {
+      handleViewRequests(linked.elderlyUserId);
+    } else {
+      Alert.alert("No linked elderly user", "Connect with an elderly user to view activity tracking.");
+    }
+  };
+
   const handlePlaceholderAction = (title: string) => {
     Alert.alert(
       title,
@@ -466,6 +482,16 @@ export default function CaregiverDashboardScreen() {
                               </Text>
                               <Text style={styles.inlineActionArrow}>→</Text>
                             </Pressable>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => handleViewTrustedContact(link.elderlyUserId)}
+                              style={styles.inlineAction}
+                            >
+                              <Text style={styles.inlineActionText}>
+                                Trusted Contact
+                              </Text>
+                              <Text style={styles.inlineActionArrow}>→</Text>
+                            </Pressable>
                           </>
                         )}
                       </View>
@@ -582,7 +608,7 @@ export default function CaregiverDashboardScreen() {
               <QuickActionCard
                 title="Visits"
                 icon="🗓"
-                onPress={() => handlePlaceholderAction("Visits")}
+                onPress={handleViewVisits}
               />
               <QuickActionCard
                 title="Message"

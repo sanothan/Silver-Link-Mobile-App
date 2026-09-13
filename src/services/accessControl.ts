@@ -20,6 +20,9 @@ export function canEnterDashboard(profile: UserProfile) {
 }
 
 export function roleForProtectedSegments(segments: readonly string[]): UserRole | null {
+  if (segments.some((segment) =>
+    ['caregiver-elderly-requests', 'caregiver-request-details', 'caregiver-trusted-contact', 'caregiver-volunteer-chat'].includes(segment),
+  )) return 'caregiver';
   return (Object.keys(ROLE_ROUTE_SEGMENT) as UserRole[]).find((role) =>
     segments.includes(ROLE_ROUTE_SEGMENT[role])) ?? null;
 }

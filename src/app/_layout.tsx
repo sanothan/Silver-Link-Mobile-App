@@ -89,6 +89,14 @@ function RootNavigator() {
         name="caregiver-request-details/[id]"
         options={{ animation: "slide_from_right" }}
       />
+      <Stack.Screen
+        name="caregiver-trusted-contact"
+        options={{ animation: "slide_from_right" }}
+      />
+      <Stack.Screen
+        name="caregiver-volunteer-chat/[id]"
+        options={{ animation: "slide_from_right" }}
+      />
       <Stack.Screen name="(elderly)" />
       <Stack.Screen name="(volunteer)" />
       <Stack.Screen name="(admin)" />

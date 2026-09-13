@@ -58,7 +58,7 @@ export default function EditRequest() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <AppBackground>
-        <RequestHeader title="Edit Request" onBack={() => router.back()} />
+        <RequestHeader title={item.status === "scheduled" ? "Reschedule Visit" : "Edit Request"} onBack={() => router.back()} />
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -68,14 +68,14 @@ export default function EditRequest() {
             contentContainerStyle={styles.content}
           >
             <View style={styles.intro}>
-              <Text style={styles.title}>Update Request Details</Text>
+              <Text style={styles.title}>{item.status === "scheduled" ? "Choose a New Date & Time" : "Update Request Details"}</Text>
               <Text style={styles.subtitle}>
                 Make only the changes your volunteer needs to know.
               </Text>
             </View>
             <RequestForm
               initial={item}
-              submitLabel="Save Changes"
+              submitLabel={item.status === "scheduled" ? "Confirm Reschedule" : "Save Changes"}
               saving={saving}
               onSubmit={async (values) => {
                 if (!user || !id) return;
@@ -87,10 +87,10 @@ export default function EditRequest() {
                     "Your request has been updated.",
                     [{ text: "Done", onPress: () => router.back() }],
                   );
-                } catch {
+                } catch (cause) {
                   Alert.alert(
                     "We couldn't update your request",
-                    "Please try again.",
+                    cause instanceof Error ? cause.message : "Please try again.",
                   );
                 } finally {
                   setSaving(false);
