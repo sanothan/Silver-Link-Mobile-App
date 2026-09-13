@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { getVolunteerRequests } from '../../services/requestService';
+import { syncActivityReminders } from '../../services/notificationService';
 import { colors } from '../../theme/colors';
 import { REQUEST_STATUS_LABELS, type CompanionshipRequest } from '../../types/request';
 
@@ -13,7 +14,7 @@ export default function Activities() {
   const { user } = useAuth();
   const router = useRouter();
   const [items, setItems] = useState<CompanionshipRequest[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(false);
-  const load = useCallback(async () => { if (!user) return; setLoading(true); setError(false); try { setItems(await getVolunteerRequests(user.uid)); } catch { setError(true); } finally { setLoading(false); } }, [user]);
+  const load = useCallback(async () => { if (!user) return; setLoading(true); setError(false); try { const requests = await getVolunteerRequests(user.uid); setItems(requests); void syncActivityReminders(requests); } catch { setError(true); } finally { setLoading(false); } }, [user]);
   // Re-reads on every focus, so an activity accepted on Explore is already here.
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
