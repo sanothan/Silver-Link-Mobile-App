@@ -77,6 +77,7 @@ export default function ElderlyTabLayout() {
       />
       <Tabs.Screen name="request-details/[id]" options={{ href: null }} />
       <Tabs.Screen name="edit-request/[id]" options={{ href: null }} />
+      <Tabs.Screen name="activity-review/[requestId]" options={{ href: null }} />
       <Tabs.Screen
         name="volunteer-profile/[requestId]"
         options={{ href: null }}

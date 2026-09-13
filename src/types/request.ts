@@ -55,6 +55,7 @@ export interface CompanionshipRequest {
   completedAt?: Date;
   cancelledAt?: Date;
   cancelledBy?: string;
+  rescheduledAt?: Date;
   updatedAt?: Date;
 }
 
@@ -74,6 +75,7 @@ export type RequestFormValues = Pick<
 export const EDITABLE_REQUEST_STATUSES: RequestStatus[] = [
   "pending",
   "accepted",
+  "scheduled",
 ];
 export const CANCELLABLE_REQUEST_STATUSES: RequestStatus[] = [
   "pending",
