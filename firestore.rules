@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// Server-side half of "Report a Safety Concern". The client redaction in
+// src/services/reportAccess.ts is for presentation; these rules are what actually keeps
+// reporter identities away from unauthorised users.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /reports/{reportId} {
+      // A report may only be read by an administrator or by the person who filed it.
+      // The user named in `subject` has no read access, so they never learn who reported them.
+      allow read: if isAdmin() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
+
+      // Reports are created by the signed-in reporter, always with status 'open'.
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.status == 'open'
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 20
+        && request.resource.data.description.size() <= 1500
+        && request.resource.data.category in [
+          'unsafe_behaviour', 'harassment', 'scam_or_fraud', 'inappropriate_content', 'no_show', 'other'
+        ];
+
+      // Only administrators triage reports, and nobody may rewrite who filed one.
+      allow update: if isAdmin() && request.resource.data.reporterId == resource.data.reporterId;
+      allow delete: if false;
+    }
+  }
+}
