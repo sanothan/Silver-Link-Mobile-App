@@ -21,6 +21,7 @@ import type {
 import { db } from "./firebaseConfig";
 import {
     createAcceptanceNotifications,
+    createRescheduleNotifications,
     createScheduleConfirmationNotifications,
     createStatusNotification,
 } from "./notificationService";
@@ -93,6 +94,7 @@ function fromSnapshot(snapshot: {
     completedAt: asDate(data.completedAt),
     cancelledAt: asDate(data.cancelledAt),
     cancelledBy: asText(data.cancelledBy),
+    rescheduledAt: asDate(data.rescheduledAt),
     updatedAt: asDate(data.updatedAt),
   };
 }
@@ -159,8 +161,13 @@ export async function updateRequest(
   values: RequestFormValues,
 ) {
   const current = await getRequestById(requestId, uid);
-  if (!["pending", "accepted"].includes(current.status))
+  if (!["pending", "accepted", "scheduled"].includes(current.status))
     throw new Error("This request can no longer be edited.");
+  const scheduleChanged =
+    current.preferredDate.getTime() !== values.preferredDate.getTime() ||
+    current.preferredTime !== values.preferredTime;
+  if (current.status === "scheduled" && !scheduleChanged)
+    throw new Error("Please choose a different date or time to reschedule.");
   await updateDoc(doc(requireDb(), "requests", requestId), {
     activityType: values.activityType,
     description: values.description?.trim() || null,
@@ -171,8 +178,35 @@ export async function updateRequest(
     location: values.location.trim(),
     latitude: values.latitude ?? null,
     longitude: values.longitude ?? null,
+    ...(scheduleChanged && current.assignedVolunteerId
+      ? { rescheduledAt: serverTimestamp() }
+      : {}),
     updatedAt: serverTimestamp(),
   });
+  if (scheduleChanged && current.assignedVolunteerId) {
+    await updateDoc(doc(requireDb(), "requestAssignments", requestId), {
+      scheduledAt: Timestamp.fromDate(values.preferredDate),
+      durationMinutes: values.durationMinutes ?? null,
+      generalLocation: values.location.trim(),
+      rescheduledAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }).catch((cause) =>
+      console.warn("[requests] Assignment schedule could not be synchronized.", cause),
+    );
+    await createRescheduleNotifications({
+      elderlyId: current.createdBy,
+      elderlyName: current.createdByName,
+      caregiverId: current.caregiverId,
+      requestId,
+      activityType: values.activityType,
+      preferredDate: values.preferredDate,
+      preferredTime: values.preferredTime,
+      volunteerId: current.assignedVolunteerId,
+      volunteerName: current.volunteerName ?? "your volunteer",
+    }).catch((cause) =>
+      console.warn("[requests] Reschedule notification could not be stored.", cause),
+    );
+  }
 }
 
 export async function cancelRequest(requestId: string, uid: string) {

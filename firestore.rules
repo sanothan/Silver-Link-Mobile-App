@@ -264,9 +264,12 @@ service cloud.firestore {
       allow update: if isAdmin() ||
         (isRole('elderly') && resource.data.createdBy == request.auth.uid &&
           request.resource.data.createdBy == resource.data.createdBy &&
-          ((resource.data.status in ['pending', 'accepted'] &&
+          ((resource.data.status in ['pending', 'accepted', 'scheduled'] &&
             request.resource.data.status == resource.data.status &&
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activityType', 'description', 'preferredDate', 'preferredTime', 'durationMinutes', 'durationLabel', 'location', 'latitude', 'longitude', 'updatedAt'])) ||
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activityType', 'description', 'preferredDate', 'preferredTime', 'durationMinutes', 'durationLabel', 'location', 'latitude', 'longitude', 'rescheduledAt', 'updatedAt']) &&
+           (resource.data.status != 'scheduled' ||
+             request.resource.data.preferredDate != resource.data.preferredDate ||
+             request.resource.data.preferredTime != resource.data.preferredTime)) ||
            (resource.data.status == 'accepted' &&
             resource.data.get('assignedVolunteerId', null) != null &&
             request.resource.data.status == 'scheduled' &&
@@ -318,8 +321,11 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
           get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid &&
           get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.status == request.resource.data.status &&
-          request.resource.data.status in ['cancelled', 'scheduled'] &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt']));
+          ((request.resource.data.status in ['cancelled', 'scheduled'] &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt'])) ||
+           (resource.data.status == 'scheduled' &&
+            request.resource.data.status == 'scheduled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scheduledAt', 'durationMinutes', 'generalLocation', 'rescheduledAt', 'updatedAt']))));
       allow delete: if isAdmin();
     }
 
@@ -364,7 +370,7 @@ service cloud.firestore {
         request.resource.data.requestId is string &&
         exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
         ((get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid &&
-          ((request.resource.data.type == 'request_scheduled' &&
+          (((request.resource.data.type == 'request_scheduled' || request.resource.data.type == 'request_rescheduled') &&
             get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'scheduled' &&
             request.resource.data.userId in [
               request.auth.uid,
@@ -427,6 +433,27 @@ service cloud.firestore {
           request.resource.data.read == true &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
       allow delete: if isAdmin();
+    }
+
+    match /activityReviews/{reviewId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() &&
+          (!exists(/databases/$(database)/documents/activityReviews/$(reviewId)) ||
+            resource.data.elderlyUserId == request.auth.uid));
+      allow create: if isRole('elderly') &&
+        request.resource.data.elderlyUserId == request.auth.uid &&
+        reviewId == request.resource.data.requestId + '_' + request.auth.uid &&
+        request.resource.data.rating is int &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5 &&
+        (request.resource.data.comment == null ||
+          (request.resource.data.comment is string && request.resource.data.comment.size() <= 500)) &&
+        request.resource.data.keys().hasOnly(['requestId', 'elderlyUserId', 'volunteerId', 'rating', 'comment', 'createdAt']) &&
+        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed' &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.resource.data.volunteerId;
+      allow update, delete: if isAdmin();
     }
 
     // ---- complaints & safety reports ----

@@ -17,10 +17,12 @@ import {
   ACCEPTANCE_NOTIFICATION_TITLE,
   ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER,
   ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER,
+  RESCHEDULE_NOTIFICATION_TITLE,
   SCHEDULE_CONFIRMATION_TITLE,
   VOLUNTEER_VERIFICATION_APPROVED_TITLE,
   VOLUNTEER_VERIFICATION_REJECTED_TITLE,
   buildAcceptanceMessage,
+  buildRescheduleMessage,
   buildScheduleConfirmationMessage,
   buildStatusNotificationContent,
   buildVolunteerVerificationMessage,
@@ -55,6 +57,7 @@ function asText(value: unknown): string | undefined {
 const TYPES: NotificationType[] = [
   "request_accepted",
   "request_scheduled",
+  "request_rescheduled",
   "request_started",
   "request_completed",
   "request_cancelled",
@@ -339,6 +342,50 @@ export async function createScheduleConfirmationNotifications(
       ),
       scheduleConfirmationPayload(context, context.caregiverId, "caregiver"),
     );
+  await batch.commit();
+}
+
+export async function createRescheduleNotifications(
+  context: ScheduleConfirmationContext,
+) {
+  const database = requireDb();
+  const batch = writeBatch(database);
+  const type = "request_rescheduled" as const;
+  const recipients: {
+    userId: string;
+    audience: NotificationAudience;
+  }[] = [
+    { userId: context.elderlyId, audience: "elderly" },
+    { userId: context.volunteerId, audience: "volunteer" },
+  ];
+  if (context.caregiverId && context.caregiverId !== context.elderlyId) {
+    recipients.push({
+      userId: context.caregiverId,
+      audience: "caregiver",
+    });
+  }
+
+  recipients.forEach(({ userId, audience }) => {
+    batch.set(
+      doc(
+        database,
+        "notifications",
+        notificationId(context.requestId, type, audience, userId),
+      ),
+      {
+        userId,
+        audience,
+        type,
+        title: RESCHEDULE_NOTIFICATION_TITLE,
+        message: buildRescheduleMessage(context, audience),
+        requestId: context.requestId,
+        volunteerId: context.volunteerId,
+        volunteerName: context.volunteerName,
+        read: false,
+        createdAt: serverTimestamp(),
+      },
+    );
+  });
   await batch.commit();
 }
 

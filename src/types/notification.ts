@@ -3,6 +3,7 @@ import type { RequestStatus } from "./request";
 export type NotificationType =
   | "request_accepted"
   | "request_scheduled"
+  | "request_rescheduled"
   | "request_started"
   | "request_completed"
   | "request_cancelled"
@@ -142,6 +143,7 @@ export const ACCEPTANCE_NOTIFICATION_TITLE = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER = "Volunteer Found";
 export const ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER = "Request Accepted";
 export const SCHEDULE_CONFIRMATION_TITLE = "Visit Scheduled";
+export const RESCHEDULE_NOTIFICATION_TITLE = "Visit Rescheduled";
 
 export function buildScheduleConfirmationMessage(
   context: ScheduleConfirmationContext,
@@ -157,6 +159,22 @@ export function buildScheduleConfirmationMessage(
   if (audience === "volunteer")
     return `Your ${context.activityType} visit is confirmed for ${when}.`;
   return `Your visit with ${context.volunteerName} has been scheduled for ${when}.`;
+}
+
+export function buildRescheduleMessage(
+  context: ScheduleConfirmationContext,
+  audience: NotificationAudience,
+): string {
+  const when = whenLabel(context.preferredDate, context.preferredTime);
+  if (audience === "caregiver") {
+    const owner = context.elderlyName
+      ? `${context.elderlyName}'s`
+      : "Your linked family member's";
+    return `${owner} ${context.activityType} visit has been rescheduled to ${when}.`;
+  }
+  if (audience === "volunteer")
+    return `Your ${context.activityType} visit has been rescheduled to ${when}.`;
+  return `Your ${context.activityType} activity has been rescheduled to ${when}.`;
 }
 
 export function notificationTypeForStatus(

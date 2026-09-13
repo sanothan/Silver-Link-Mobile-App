@@ -1,4 +1,4 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -61,7 +61,7 @@ export default function VolunteerRequestDetails() {
       {isOpen ? <Pressable accessibilityRole="button" accessibilityLabel="Accept this request" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={confirmAccept}><Text style={styles.actionText}>{saving ? 'Accepting…' : 'Accept Request'}</Text></Pressable> : null}
       {isMine && item.status === 'scheduled' ? <Pressable accessibilityRole="button" accessibilityLabel="Start this visit" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('in_progress')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Start Visit'}</Text></Pressable> : null}
       {isMine && item.status === 'in_progress' ? <Pressable accessibilityRole="button" accessibilityLabel="Mark this visit completed" disabled={saving} style={[styles.action, saving && styles.disabled]} onPress={() => void advance('completed')}><Text style={styles.actionText}>{saving ? 'Updating…' : 'Complete Visit'}</Text></Pressable> : null}
-      {isMine && item.caregiverId && canChatForStatus(item.status) ? <Pressable accessibilityRole="button" accessibilityLabel="Message caregiver" style={styles.chatAction} onPress={() => router.push(`/(volunteer)/request-chat/${item.id}`)}><Text style={styles.chatActionText}>Message Caregiver</Text></Pressable> : null}
+      {isMine && item.caregiverId && canChatForStatus(item.status) ? <Pressable accessibilityRole="button" accessibilityLabel="Message caregiver" style={styles.chatAction} onPress={() => router.push(`/(volunteer)/request-chat/${item.id}` as Href)}><Text style={styles.chatActionText}>Message Caregiver</Text></Pressable> : null}
     </ScrollView>
   </SafeAreaView>;
 }
