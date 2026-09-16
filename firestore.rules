@@ -57,5 +57,58 @@ service cloud.firestore {
             || request.resource.data.adminNote.size() > 0);
       allow delete: if false;
     }
+
+    // Server-side half of "Submit Activity Feedback". The checks in
+    // src/services/feedbackAccess.ts shape the form; these rules are what actually stops
+    // feedback being written against an activity the author had nothing to do with.
+    function activityData(activityId) {
+      return get(/databases/$(database)/documents/requests/$(activityId)).data;
+    }
+
+    function activityExists(activityId) {
+      return exists(/databases/$(database)/documents/requests/$(activityId));
+    }
+
+    // Mirrors asParticipantIds() in src/services/feedbackService.ts: the people named on
+    // the activity, however the request screens happened to record them.
+    function isActivityParticipant(activityId) {
+      let activity = activityData(activityId);
+      return request.auth.uid in [
+        activity.get('elderlyId', ''),
+        activity.get('caregiverId', ''),
+        activity.get('volunteerId', ''),
+        activity.get('requesterId', ''),
+        activity.get('createdBy', ''),
+        activity.get('acceptedBy', '')
+      ] || request.auth.uid in activity.get('participantIds', []);
+    }
+
+    match /activityFeedback/{feedbackId} {
+      // Feedback is read by administrators, who act on it, and by its own author.
+      allow read: if isAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
+
+      // Feedback may only be created by the signed-in author, against an activity that
+      // exists, is completed, and that the author actually took part in.
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.activityId is string
+        && activityExists(request.resource.data.activityId)
+        // `get` with a default rather than `.status`, so an activity document without the
+        // field is simply refused instead of failing the whole rule evaluation.
+        && activityData(request.resource.data.activityId).get('status', '') == 'completed'
+        && isActivityParticipant(request.resource.data.activityId)
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() >= 10
+        && request.resource.data.comment.size() <= 1000
+        // The rating is optional, so it is either absent, null, or a star between 1 and 5.
+        && (request.resource.data.get('rating', null) == null
+            || (request.resource.data.rating is int
+                && request.resource.data.rating >= 1
+                && request.resource.data.rating <= 5));
+
+      // Submitted feedback is a record of what someone said at the time, so it is never
+      // rewritten or removed - not by its author, and not by an administrator.
+      allow update, delete: if false;
+    }
   }
 }
