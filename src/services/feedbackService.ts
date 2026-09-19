@@ -70,7 +70,12 @@ function asParticipantIds(data: Record<string, unknown>): string[] {
   return Array.from(new Set(all));
 }
 
-function toActivity(id: string, data: Record<string, unknown>): ActivitySummary {
+/**
+ * One activity document as the app understands it. Exported so other features - the
+ * volunteer rating service among them - read activities the same way rather than growing
+ * a second, slightly different idea of what a request document means.
+ */
+export function toActivity(id: string, data: Record<string, unknown>): ActivitySummary {
   return {
     id,
     title: asText(data.title) || asText(data.activityType) || 'Activity request',

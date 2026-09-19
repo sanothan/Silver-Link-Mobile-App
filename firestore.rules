@@ -110,5 +110,49 @@ service cloud.firestore {
       // rewritten or removed - not by its author, and not by an administrator.
       allow update, delete: if false;
     }
+
+    // Server-side half of "Rate Volunteer". The checks in
+    // src/services/volunteerRatingAccess.ts shape the form; these rules are what actually
+    // stops a volunteer being rated by someone they never helped - or rated twice.
+    match /volunteerRatings/{ratingId} {
+      // Ratings are a volunteer's public standing, so any signed-in member may read them:
+      // that is what lets the app show a volunteer's score before accepting their help.
+      allow read: if isSignedIn();
+
+      // A rating may only be created by the signed-in rater, against a completed activity
+      // they took part in, and only about the volunteer that activity actually had.
+      //
+      // The document id is fixed to '<activityId>__<raterId>', which is what makes the
+      // "one rating per activity" rule enforceable: a second submission lands on the same
+      // document, and update is denied below, so the duplicate is refused by the server
+      // even if two devices submit at once.
+      allow create: if isSignedIn()
+        && ratingId == request.resource.data.activityId + '__' + request.auth.uid
+        && request.resource.data.raterId == request.auth.uid
+        && request.resource.data.activityId is string
+        && activityExists(request.resource.data.activityId)
+        && activityData(request.resource.data.activityId).get('status', '') == 'completed'
+        && isActivityParticipant(request.resource.data.activityId)
+        // The rating is about the activity's own volunteer, and nobody rates themselves.
+        // Both field names are honoured, mirroring toActivity() in
+        // src/services/feedbackService.ts, so a request recorded either way still works.
+        && request.resource.data.volunteerId is string
+        && request.resource.data.volunteerId != ''
+        && request.resource.data.volunteerId in [
+          activityData(request.resource.data.activityId).get('volunteerId', ''),
+          activityData(request.resource.data.activityId).get('acceptedBy', '')
+        ]
+        && request.resource.data.volunteerId != request.auth.uid
+        // The agreed scale: a whole number from 1 to 5, and never absent.
+        && request.resource.data.score is int
+        && request.resource.data.score >= 1
+        && request.resource.data.score <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() <= 500;
+
+      // A rating is a record of what someone thought at the time. Denying update is also
+      // what makes the fixed document id an effective duplicate guard.
+      allow update, delete: if false;
+    }
   }
 }
