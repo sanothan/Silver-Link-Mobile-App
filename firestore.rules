@@ -16,6 +16,24 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Server-side half of "View Community Impact Dashboard". The dashboard reads every
+    // member and every request to calculate its figures, which is why it is an
+    // administrator-only screen in src/services/communityImpactAccess.ts. These rules are
+    // what actually stops anybody else sweeping the two collections: a member may read
+    // their own profile and the requests they can already see, but only an administrator
+    // may read the whole of either one.
+    //
+    // Only reads are stated here. Registration and the request screens write these
+    // documents through whatever rules they already rely on, and this file deliberately
+    // does not change who may write them.
+    match /users/{userId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+    }
+
+    match /requests/{requestId} {
+      allow read: if isSignedIn();
+    }
+
     match /reports/{reportId} {
       // A report may only be read by an administrator or by the person who filed it.
       // The user named in `subject` has no read access, so they never learn who reported them.
