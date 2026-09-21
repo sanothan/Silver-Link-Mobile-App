@@ -31,7 +31,17 @@ service cloud.firestore {
     }
 
     match /requests/{requestId} {
-      allow read: if isSignedIn();
+      // Requests can contain sensitive information about the person receiving help.
+      // A member may only read an activity they are named on; this also makes a query
+      // for another volunteer's history fail at the server, not just disappear in the UI.
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid in [
+        resource.data.get('elderlyId', ''),
+        resource.data.get('caregiverId', ''),
+        resource.data.get('volunteerId', ''),
+        resource.data.get('requesterId', ''),
+        resource.data.get('createdBy', ''),
+        resource.data.get('acceptedBy', '')
+      ]) || (isSignedIn() && request.auth.uid in resource.data.get('participantIds', []));
     }
 
     match /reports/{reportId} {
