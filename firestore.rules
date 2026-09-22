@@ -10,7 +10,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
+    function isNewFeatureAdmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
@@ -27,14 +27,14 @@ service cloud.firestore {
     // documents through whatever rules they already rely on, and this file deliberately
     // does not change who may write them.
     match /users/{userId} {
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow read: if isNewFeatureAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     match /requests/{requestId} {
       // Requests can contain sensitive information about the person receiving help.
       // A member may only read an activity they are named on; this also makes a query
       // for another volunteer's history fail at the server, not just disappear in the UI.
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid in [
+      allow read: if isNewFeatureAdmin() || (isSignedIn() && request.auth.uid in [
         resource.data.get('elderlyId', ''),
         resource.data.get('caregiverId', ''),
         resource.data.get('volunteerId', ''),
@@ -47,7 +47,7 @@ service cloud.firestore {
     match /reports/{reportId} {
       // A report may only be read by an administrator or by the person who filed it.
       // The user named in `subject` has no read access, so they never learn who reported them.
-      allow read: if isAdmin() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
+      allow read: if isNewFeatureAdmin() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
 
       // Reports are created by the signed-in reporter, always with status 'open'.
       allow create: if isSignedIn()
@@ -67,7 +67,7 @@ service cloud.firestore {
       // reported, or the history of how it was handled. `statusHistory` may only grow, and
       // the entries already stored must come back unchanged, so the audit trail is append
       // only even for an administrator.
-      allow update: if isAdmin()
+      allow update: if isNewFeatureAdmin()
         && request.resource.data.reporterId == resource.data.reporterId
         && request.resource.data.description == resource.data.description
         && request.resource.data.category == resource.data.category
@@ -113,7 +113,7 @@ service cloud.firestore {
 
     match /activityFeedback/{feedbackId} {
       // Feedback is read by administrators, who act on it, and by its own author.
-      allow read: if isAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
+      allow read: if isNewFeatureAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
 
       // Feedback may only be created by the signed-in author, against an activity that
       // exists, is completed, and that the author actually took part in.
@@ -181,6 +181,543 @@ service cloud.firestore {
       // A rating is a record of what someone thought at the time. Denying update is also
       // what makes the fixed document id an effective duplicate guard.
       allow update, delete: if false;
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // NOTE: costs an extra read per rule evaluation, but it's the only way to
+    // check a caller's role without trusting client-supplied data.
+    function callerProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function callerRole() {
+      return isSignedIn() ? callerProfile().role : null;
+    }
+
+    function hasPlatformAccess() {
+      return isSignedIn() &&
+        (callerProfile().status == 'active' ||
+          (callerProfile().role == 'volunteer' && callerProfile().status == 'pending'));
+    }
+
+    function isAdmin() {
+      return isSignedIn() && callerRole() == 'admin';
+    }
+
+    function isRole(role) {
+      return hasPlatformAccess() && callerRole() == role;
+    }
+
+    function hasAcceptedCaregiver(caregiverUid, elderlyUid) {
+      return exists(/databases/$(database)/documents/users/$(elderlyUid)) &&
+        get(/databases/$(database)/documents/users/$(elderlyUid)).data.caregiverId == caregiverUid;
+    }
+
+    function isLinkedCaregiver(elderlyUid) {
+      return isRole('caregiver') &&
+        hasAcceptedCaregiver(request.auth.uid, elderlyUid);
+    }
+
+    function isChatActive(status) {
+      return status in ['accepted', 'scheduled', 'in_progress'];
+    }
+
+    function isRequestChatParticipant(chat) {
+      return isSignedIn() &&
+        chat.requestId is string &&
+        exists(/databases/$(database)/documents/requests/$(chat.requestId)) &&
+        ((isRole('caregiver') &&
+          chat.caregiverId == request.auth.uid &&
+          isLinkedCaregiver(chat.elderlyUserId) &&
+          get(/databases/$(database)/documents/requests/$(chat.requestId)).data.createdBy == chat.elderlyUserId &&
+          get(/databases/$(database)/documents/requests/$(chat.requestId)).data.assignedVolunteerId == chat.volunteerId) ||
+         (isRole('volunteer') &&
+          chat.volunteerId == request.auth.uid &&
+          get(/databases/$(database)/documents/requests/$(chat.requestId)).data.assignedVolunteerId == request.auth.uid &&
+          get(/databases/$(database)/documents/requests/$(chat.requestId)).data.createdBy == chat.elderlyUserId &&
+          get(/databases/$(database)/documents/requests/$(chat.requestId)).data.caregiverId == chat.caregiverId &&
+          hasAcceptedCaregiver(chat.caregiverId, chat.elderlyUserId)));
+    }
+
+    // A volunteer may only claim a request that is *stored* as pending and
+    // unassigned, and only by stamping their own uid onto it. Two volunteers
+    // racing for the same request both send this write; the first commit flips
+    // the stored status to 'accepted', so the second no longer satisfies the
+    // rule and is rejected by the database itself. Nothing here depends on the
+    // client having disabled a button or run the acceptance transaction.
+    function isVolunteerAcceptance() {
+      return isRole('volunteer') &&
+        resource.data.status == 'pending' &&
+        resource.data.get('assignedVolunteerId', null) == null &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.assignedVolunteerId == request.auth.uid &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        resource.data.createdBy != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified', 'volunteerPhotoUrl', 'volunteerBio', 'volunteerExperience', 'volunteerRating', 'acceptedAt', 'updatedAt']);
+    }
+
+    function isWithdrawal(requestId) {
+      let before = get(/databases/$(database)/documents/requests/$(requestId)).data;
+      let after = getAfter(/databases/$(database)/documents/requests/$(requestId)).data;
+      return isRole('volunteer') && before.assignedVolunteerId == request.auth.uid &&
+        before.status in ['accepted', 'scheduled'] && after.status == 'pending' &&
+        after.assignedVolunteerId == null && after.withdrawnBy == request.auth.uid &&
+        after.withdrawnAt == request.time;
+    }
+
+    function isVolunteerWithdrawal(requestId) {
+      return isWithdrawal(requestId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'assignedVolunteerId', 'volunteerName', 'volunteerVerified',
+          'volunteerPhotoUrl', 'volunteerBio', 'volunteerExperience', 'volunteerRating',
+          'acceptedAt', 'elderConfirmedAt', 'rescheduledAt', 'withdrawnAt', 'withdrawnBy', 'updatedAt'
+        ]) && request.resource.data.volunteerName == null &&
+        request.resource.data.volunteerVerified == false &&
+        request.resource.data.volunteerPhotoUrl == null && request.resource.data.volunteerBio == null &&
+        request.resource.data.volunteerExperience == null && request.resource.data.volunteerRating == null &&
+        request.resource.data.acceptedAt == null && request.resource.data.elderConfirmedAt == null &&
+        getAfter(/databases/$(database)/documents/requestAssignments/$(requestId)).data.status == 'withdrawn';
+    }
+
+    function isVolunteerProgressUpdate() {
+      return isRole('volunteer') &&
+        resource.data.assignedVolunteerId == request.auth.uid &&
+        request.resource.data.assignedVolunteerId == request.auth.uid &&
+        ((resource.data.status == 'scheduled' && request.resource.data.status == 'in_progress' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt', 'updatedAt'])) ||
+         (resource.data.status == 'in_progress' && request.resource.data.status == 'completed' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'updatedAt'])));
+    }
+
+    // Only elderly/volunteer/caregiver may self-register; admin is console-only
+    // (set manually in the Firebase console, never through a client write).
+    function isSelfRegistration(uid) {
+      return isOwner(request.resource.data.uid) &&
+        request.auth.uid == uid &&
+        request.resource.data.role in ['elderly', 'volunteer', 'caregiver'] &&
+        request.resource.data.status in ['active', 'pending'];
+    }
+
+    // ---- users/{uid} ----
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin() || isLinkedCaregiver(uid);
+      allow create: if isSelfRegistration(uid);
+      // Owners may update their own profile but never their own role/status
+      // (that would be self-granted privilege escalation / unverifying
+      // themselves); admins may change anything.
+      allow update: if isAdmin() ||
+        (isOwner(uid) &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.uid == resource.data.uid &&
+          (request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['fullName', 'phone', 'locality', 'preferredLanguage', 'photoUrl', 'updatedAt']) ||
+           (request.resource.data.caregiverId is string &&
+            (resource.data.get('caregiverId', null) == null ||
+             resource.data.caregiverId == request.resource.data.caregiverId) &&
+            request.resource.data.caregiverLinkId is string &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['caregiverId', 'caregiverLinkId', 'updatedAt']) &&
+            exists(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)) &&
+            getAfter(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)).data.status == 'accepted' &&
+            getAfter(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)).data.elderlyUserId == request.auth.uid &&
+            getAfter(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.caregiverLinkId)).data.caregiverId == request.resource.data.caregiverId)));
+      allow update: if isRole('caregiver') &&
+        isLinkedCaregiver(uid) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['trustedContact', 'updatedAt']) &&
+        (request.resource.data.get('trustedContact', null) == null ||
+          (request.resource.data.trustedContact is map &&
+            request.resource.data.trustedContact.keys().hasOnly(['name', 'relationship', 'phone', 'email']) &&
+            request.resource.data.trustedContact.name is string &&
+            request.resource.data.trustedContact.relationship is string &&
+            request.resource.data.trustedContact.phone is string &&
+            (!request.resource.data.trustedContact.keys().hasAny(['email']) ||
+              request.resource.data.trustedContact.email is string)));
+      allow delete: if isAdmin();
+    }
+
+    // ---- volunteer/{uid}-keyed collections ----
+    // The verification fields are the admin's decision record. A volunteer may
+    // edit the rest of their own profile but must never be able to mark
+    // themselves verified, so every verification key is admin-only here.
+    function touchesVerificationFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['verificationStatus', 'verificationDecidedAt', 'verificationDecidedBy', 'verificationDecidedByName', 'verificationNote']);
+    }
+
+    match /volunteerProfiles/{uid} {
+      allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+      allow create: if isAdmin() ||
+        (isOwner(uid) && hasPlatformAccess() &&
+          !request.resource.data.keys()
+            .hasAny(['verificationStatus', 'verificationDecidedAt', 'verificationDecidedBy', 'verificationDecidedByName', 'verificationNote']));
+      allow update: if isAdmin() ||
+        (isOwner(uid) && hasPlatformAccess() && !touchesVerificationFields());
+      allow delete: if isAdmin();
+    }
+
+    // ---- volunteer verification audit trail ----
+    // Append-only by design: an admin records a decision, everyone keeps it.
+    // Volunteers may read their own history so a decision is never invisible
+    // to the person it affects.
+    match /volunteerVerifications/{recordId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.volunteerId == request.auth.uid);
+      allow create: if isAdmin() &&
+        request.resource.data.adminId == request.auth.uid &&
+        request.resource.data.decision in ['approved', 'rejected'] &&
+        request.resource.data.volunteerId is string;
+      allow update, delete: if false;
+    }
+
+    match /volunteerStats/{uid} {
+      allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+      // Stats should only ever be computed/adjusted by an admin, not the
+      // volunteer themselves.
+      allow write: if isAdmin();
+    }
+
+    match /volunteerAvailability/{availabilityId} {
+      allow read: if isAdmin() ||
+        (hasPlatformAccess() && resource.data.volunteerId == request.auth.uid);
+      allow create: if isRole('volunteer') &&
+        request.resource.data.volunteerId == request.auth.uid;
+      allow update: if isAdmin() ||
+        (hasPlatformAccess() && resource.data.volunteerId == request.auth.uid &&
+          request.resource.data.volunteerId == resource.data.volunteerId);
+      allow delete: if isAdmin() ||
+        (hasPlatformAccess() && resource.data.volunteerId == request.auth.uid);
+    }
+
+    // Compatibility for records written by the earlier owner-scoped layout.
+    match /volunteerAvailability/{uid}/entries/{availabilityId} {
+      allow read: if (isOwner(uid) && hasPlatformAccess()) || isAdmin();
+      allow create: if (isOwner(uid) && hasPlatformAccess()) &&
+        request.resource.data.volunteerId == request.auth.uid;
+      allow update, delete: if isAdmin() ||
+        (isOwner(uid) && hasPlatformAccess() && resource.data.volunteerId == request.auth.uid);
+    }
+
+    // Minimal search directory. Caregivers can find an elderly member by an
+    // email they already know without gaining access to private users fields.
+    match /elderlyDirectory/{uid} {
+      allow read: if isOwner(uid) || isRole('caregiver') || isAdmin();
+      allow create: if isOwner(uid) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.role == 'elderly' &&
+        request.resource.data.keys().hasOnly(['uid', 'fullName', 'email', 'role', 'photoUrl', 'updatedAt']);
+      allow update: if isOwner(uid) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'photoUrl', 'updatedAt']);
+      allow delete: if isAdmin();
+    }
+
+    // ---- caregiver connection requests ----
+    match /caregiverLinks/{linkId} {
+      allow read: if isAdmin() ||
+        (hasPlatformAccess() &&
+          (resource.data.caregiverId == request.auth.uid ||
+           resource.data.elderlyUserId == request.auth.uid));
+      allow create: if isRole('caregiver') &&
+        request.resource.data.caregiverId == request.auth.uid &&
+        request.resource.data.elderlyUserId != request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.requestedBy == 'caregiver' &&
+        exists(/databases/$(database)/documents/users/$(request.resource.data.elderlyUserId)) &&
+        get(/databases/$(database)/documents/users/$(request.resource.data.elderlyUserId)).data.role == 'elderly';
+      allow update: if isAdmin() ||
+        (resource.data.status == 'pending' &&
+          request.resource.data.caregiverId == resource.data.caregiverId &&
+          request.resource.data.elderlyUserId == resource.data.elderlyUserId &&
+          request.resource.data.requestedBy == resource.data.requestedBy &&
+          ((isRole('elderly') && resource.data.elderlyUserId == request.auth.uid &&
+            ((request.resource.data.status == 'accepted' &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt', 'updatedAt'])) ||
+             (request.resource.data.status == 'rejected' &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rejectedAt', 'updatedAt'])))) ||
+           (isRole('caregiver') && resource.data.caregiverId == request.auth.uid &&
+            request.resource.data.status == 'cancelled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'updatedAt']))));
+      allow delete: if isAdmin();
+    }
+
+    // ---- companionship requests ----
+    match /requests/{requestId} {
+      allow read: if isAdmin() ||
+        (hasPlatformAccess() && resource.data.createdBy == request.auth.uid) ||
+        isRole('volunteer') ||
+        isLinkedCaregiver(resource.data.createdBy);
+      allow create: if isRole('elderly') &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.keys().hasAll(['createdBy', 'activityType', 'preferredDate', 'preferredTime', 'location', 'status']);
+      // Elderly owners can edit only user-managed fields while pending or
+      // accepted, or cancel a pending/accepted/scheduled request.
+      allow update: if isAdmin() ||
+        (isRole('elderly') && resource.data.createdBy == request.auth.uid &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          ((resource.data.status in ['pending', 'accepted', 'scheduled'] &&
+            request.resource.data.status == resource.data.status &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activityType', 'description', 'preferredDate', 'preferredTime', 'durationMinutes', 'durationLabel', 'location', 'latitude', 'longitude', 'rescheduledAt', 'updatedAt']) &&
+           (resource.data.status != 'scheduled' ||
+             request.resource.data.preferredDate != resource.data.preferredDate ||
+             request.resource.data.preferredTime != resource.data.preferredTime)) ||
+           (resource.data.status == 'accepted' &&
+            resource.data.get('assignedVolunteerId', null) != null &&
+            request.resource.data.status == 'scheduled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt'])) ||
+           (resource.data.status in ['pending', 'accepted', 'scheduled'] &&
+            request.resource.data.status == 'cancelled' &&
+            request.resource.data.cancelledBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancelledBy', 'updatedAt'])))) ||
+        isVolunteerAcceptance() || isVolunteerProgressUpdate() || isVolunteerWithdrawal(requestId);
+      // Preserve workflow history; only admins may hard-delete requests.
+      allow delete: if isAdmin();
+    }
+
+    match /requestAssignmentHistory/{historyId} {
+      allow read: if isAdmin() || (isRole('volunteer') && resource.data.volunteerId == request.auth.uid);
+      allow create: if isWithdrawal(request.resource.data.requestId) &&
+        request.resource.data == getAfter(/databases/$(database)/documents/requestAssignments/$(request.resource.data.requestId)).data;
+      allow update, delete: if false;
+    }
+
+    match /requestAssignments/{assignmentId} {
+      allow get: if isRole('volunteer') && resource.data.status == 'withdrawn';
+      allow create, update: if isWithdrawal(assignmentId) &&
+        request.resource.data.requestId == assignmentId &&
+        request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.status == 'withdrawn' &&
+        request.resource.data.withdrawnAt == request.time &&
+        (!exists(/databases/$(database)/documents/requestAssignments/$(assignmentId)) ||
+          (resource.data.volunteerId == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'withdrawnAt', 'updatedAt'])));
+      allow update: if isRole('volunteer') && resource.data.status == 'withdrawn' &&
+        get(/databases/$(database)/documents/requests/$(assignmentId)).data.status == 'pending' &&
+        getAfter(/databases/$(database)/documents/requests/$(assignmentId)).data.status == 'accepted' &&
+        getAfter(/databases/$(database)/documents/requests/$(assignmentId)).data.assignedVolunteerId == request.auth.uid &&
+        request.resource.data.requestId == assignmentId && request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.keys().hasOnly(['requestId', 'volunteerId', 'activityType', 'scheduledAt', 'durationMinutes', 'generalLocation', 'status', 'createdAt']);
+      // A volunteer's acceptance transaction reads this doc to check whether
+      // the request is already claimed, and on the first-ever acceptance it
+      // doesn't exist yet. That "not found" read must itself be allowed (any
+      // signed-in user may confirm absence) — only once the document exists
+      // do we dereference resource.data to restrict who may read its content.
+      allow read: if isAdmin() ||
+        (isSignedIn() &&
+          !exists(/databases/$(database)/documents/requestAssignments/$(assignmentId))) ||
+        (exists(/databases/$(database)/documents/requestAssignments/$(assignmentId)) &&
+          (resource.data.volunteerId == request.auth.uid ||
+            (isSignedIn() &&
+              exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
+              get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid)));
+      // The assignment id must be the request id, so a request can hold at most
+      // one assignment document. `create` only ever succeeds on a document that
+      // does not exist yet, which makes "one volunteer per request" a database
+      // constraint rather than a check the client could skip. A second
+      // volunteer's write lands as an update and is refused below, because the
+      // stored volunteerId is not theirs.
+      allow create: if isRole('volunteer') &&
+        request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.requestId == assignmentId;
+      allow update: if isAdmin() ||
+        (isRole('volunteer') && resource.data.volunteerId == request.auth.uid &&
+          request.resource.data.volunteerId == resource.data.volunteerId &&
+          exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
+          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.status == request.resource.data.status &&
+          ((request.resource.data.status == 'in_progress' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt', 'updatedAt'])) ||
+           (request.resource.data.status == 'completed' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'updatedAt'])))) ||
+        // The elderly owner cancelling their request must be able to mark the
+        // matching assignment cancelled too, so a volunteer's or admin's
+        // dashboard stops showing it as an active activity. Limited to
+        // flipping status to 'cancelled' only.
+        (isRole('elderly') &&
+          exists(/databases/$(database)/documents/requests/$(resource.data.requestId)) &&
+          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.createdBy == request.auth.uid &&
+          get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.status == request.resource.data.status &&
+          ((request.resource.data.status in ['cancelled', 'scheduled'] &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt'])) ||
+           (resource.data.status == 'scheduled' &&
+            request.resource.data.status == 'scheduled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scheduledAt', 'durationMinutes', 'generalLocation', 'rescheduledAt', 'updatedAt']))));
+      allow delete: if isAdmin();
+    }
+
+    // ---- request-specific caregiver/volunteer chats ----
+    match /requestChats/{requestId} {
+      allow read: if isRequestChatParticipant(resource.data);
+      allow create: if isRequestChatParticipant(request.resource.data) &&
+        get(/databases/$(database)/documents/requests/$(requestId)).data.status in ['accepted', 'scheduled', 'in_progress'] &&
+        request.resource.data.requestId == requestId;
+      allow update: if isRequestChatParticipant(resource.data) &&
+        isChatActive(get(/databases/$(database)/documents/requests/$(requestId)).data.status) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']);
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if exists(/databases/$(database)/documents/requestChats/$(requestId)) &&
+          isRequestChatParticipant(get(/databases/$(database)/documents/requestChats/$(requestId)).data);
+        allow create: if exists(/databases/$(database)/documents/requestChats/$(requestId)) &&
+          isRequestChatParticipant(get(/databases/$(database)/documents/requestChats/$(requestId)).data) &&
+          isChatActive(get(/databases/$(database)/documents/requests/$(requestId)).data.status) &&
+          request.resource.data.senderId == request.auth.uid &&
+          ((isRole('caregiver') && request.resource.data.senderRole == 'caregiver') ||
+           (isRole('volunteer') && request.resource.data.senderRole == 'volunteer')) &&
+          request.resource.data.text is string &&
+          request.resource.data.readBy is list &&
+          request.resource.data.keys().hasOnly(['senderId', 'senderRole', 'text', 'readBy', 'createdAt']);
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ---- notifications ----
+    match /notifications/{notificationId} {
+      allow create: if request.resource.data.type == 'volunteer_withdrawn' &&
+        isWithdrawal(request.resource.data.requestId) &&
+        request.resource.data.volunteerId == request.auth.uid &&
+        request.resource.data.read == false && request.resource.data.createdAt == request.time &&
+        ((request.resource.data.audience == 'elderly' &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy) ||
+         (request.resource.data.audience == 'caregiver' &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null) &&
+          hasAcceptedCaregiver(request.resource.data.userId,
+            get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy)));
+      allow read: if isAdmin() || resource.data.userId == request.auth.uid;
+      // Status alerts must point to a real request in the matching stored
+      // state. Elders can create their own cancelled alert, and — once the
+      // request is scheduled — the scheduled alert for themselves, the
+      // assigned volunteer, and the linked caregiver. Assigned volunteers can
+      // create accepted/started/completed alerts for the owner (and the
+      // linked caregiver for acceptance only).
+      allow create: if hasPlatformAccess() && request.resource.data.read == false &&
+        request.resource.data.requestId is string &&
+        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
+        ((get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid &&
+          (((request.resource.data.type == 'request_scheduled' || request.resource.data.type == 'request_rescheduled') &&
+            get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'scheduled' &&
+            request.resource.data.userId in [
+              request.auth.uid,
+              get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId,
+              get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null)
+            ]) ||
+           (request.resource.data.type == 'request_cancelled' &&
+            request.resource.data.userId == request.auth.uid &&
+            get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'cancelled'))) ||
+         (isRole('volunteer') && request.resource.data.volunteerId == request.auth.uid &&
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid &&
+          (request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy ||
+           request.resource.data.userId == request.auth.uid ||
+           (request.resource.data.type == 'request_accepted' && request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null))) &&
+          ((request.resource.data.type == 'request_accepted' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'accepted') ||
+           (request.resource.data.type == 'request_started' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'in_progress') ||
+           (request.resource.data.type == 'request_completed' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed'))));
+      // Upcoming-visit reminders. Either participant of a scheduled visit may
+      // generate them for the whole party — the elder, the assigned
+      // volunteer, and the linked caregiver — but only while the request is
+      // still stored as 'scheduled', so a cancelled visit can never remind
+      // anyone. Reminder ids are deterministic and these documents are never
+      // updated except to mark them read, so a repeated pass overwrites
+      // nothing new rather than stacking duplicates.
+      allow create: if hasPlatformAccess() && request.resource.data.read == false &&
+        request.resource.data.type == 'activity_reminder' &&
+        request.resource.data.requestId is string &&
+        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'scheduled' &&
+        (get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid ||
+         get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid) &&
+        request.resource.data.userId in [
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy,
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId,
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null)
+        ];
+      allow create: if hasPlatformAccess() && request.resource.data.read == false &&
+        request.resource.data.linkId is string &&
+        exists(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)) &&
+        ((isRole('caregiver') &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.caregiverId == request.auth.uid &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.elderlyUserId == request.resource.data.userId &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'pending' &&
+          request.resource.data.type == 'caregiver_link_request') ||
+         (isRole('elderly') &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.elderlyUserId == request.auth.uid &&
+          get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.caregiverId == request.resource.data.userId &&
+          ((get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'accepted' && request.resource.data.type == 'caregiver_link_accepted') ||
+           (get(/databases/$(database)/documents/caregiverLinks/$(request.resource.data.linkId)).data.status == 'rejected' && request.resource.data.type == 'caregiver_link_rejected'))));
+      allow create: if hasPlatformAccess() &&
+        request.resource.data.type == 'chat_message' &&
+        request.resource.data.read == false &&
+        request.resource.data.requestId is string &&
+        request.resource.data.chatId == request.resource.data.requestId &&
+        request.resource.data.senderId == request.auth.uid &&
+        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status in ['accepted', 'scheduled', 'in_progress'] &&
+        ((isRole('caregiver') &&
+          isLinkedCaregiver(get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy) &&
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.caregiverId == request.auth.uid &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId) ||
+         (isRole('volunteer') &&
+          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.caregiverId));
+      // An admin telling a volunteer how their verification was decided. The
+      // stored verification status must already match the decision, so the
+      // alert can never claim something the record does not say.
+      allow create: if isAdmin() && request.resource.data.read == false &&
+        request.resource.data.audience == 'volunteer' &&
+        request.resource.data.userId is string &&
+        request.resource.data.userId == request.resource.data.volunteerId &&
+        exists(/databases/$(database)/documents/volunteerProfiles/$(request.resource.data.userId)) &&
+        ((request.resource.data.type == 'volunteer_verification_approved' &&
+          get(/databases/$(database)/documents/volunteerProfiles/$(request.resource.data.userId)).data.verificationStatus == 'verified') ||
+         (request.resource.data.type == 'volunteer_verification_rejected' &&
+          get(/databases/$(database)/documents/volunteerProfiles/$(request.resource.data.userId)).data.verificationStatus == 'rejected'));
+      allow update: if isAdmin() ||
+        (resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId &&
+          request.resource.data.read == true &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
+      allow delete: if isAdmin();
+    }
+
+    match /activityReviews/{reviewId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() &&
+          (!exists(/databases/$(database)/documents/activityReviews/$(reviewId)) ||
+            resource.data.elderlyUserId == request.auth.uid));
+      allow create: if isRole('elderly') &&
+        request.resource.data.elderlyUserId == request.auth.uid &&
+        reviewId == request.resource.data.requestId + '_' + request.auth.uid &&
+        request.resource.data.rating is int &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5 &&
+        (request.resource.data.comment == null ||
+          (request.resource.data.comment is string && request.resource.data.comment.size() <= 500)) &&
+        request.resource.data.keys().hasOnly(['requestId', 'elderlyUserId', 'volunteerId', 'rating', 'comment', 'createdAt']) &&
+        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed' &&
+        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.resource.data.volunteerId;
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- complaints & safety reports ----
+    match /reports/{reportId} {
+      allow read: if isAdmin() || resource.data.createdBy == request.auth.uid;
+      allow create: if hasPlatformAccess() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.status == 'open';
+      // Only an admin resolves a report; the reporter cannot alter it after filing.
+      allow update, delete: if isAdmin();
+    }
+
+    // Deny anything not explicitly matched above.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

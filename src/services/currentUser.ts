@@ -8,7 +8,7 @@ import type { ReportViewer } from './reportAccess';
  */
 export async function getCurrentViewer(): Promise<ReportViewer | null> {
   const user = auth?.currentUser;
-  if (!user) return null;
+  if (!user || !db) return null;
   let role = '';
   try {
     const profile = await getDoc(doc(db, 'users', user.uid));

@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCategoryLabel } from '../services/communityImpactStats';
 import { getCurrentViewer } from '../services/currentUser';
 import { getMyVolunteerActivityHistory } from '../services/volunteerActivityHistory';
-import { colors } from '../theme/Colors';
+import { colors } from '../theme/colors';
 import { ACTIVITY_STATUS_LABEL } from '../types/feedback';
 import type { VolunteerActivityHistoryItem } from '../types/volunteer';
 

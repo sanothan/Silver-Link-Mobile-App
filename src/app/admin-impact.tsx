@@ -8,7 +8,7 @@ import type { CommunityImpactResult } from '../services/communityImpactService';
 import { formatVolunteerHours } from '../services/communityImpactStats';
 import { getCurrentViewer } from '../services/currentUser';
 import type { ReportViewer } from '../services/reportAccess';
-import { colors } from '../theme/Colors';
+import { colors } from '../theme/colors';
 import { formatRelativeTime } from '../utils/time';
 
 type LoadState = 'loading' | 'ready' | 'denied' | 'error';
