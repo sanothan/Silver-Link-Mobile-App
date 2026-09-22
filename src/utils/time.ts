@@ -10,3 +10,8 @@ export function formatRelativeTime(date?: Date): string {
   if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
+
+export function formatDate(date?: Date): string {
+  if (!date) return 'Date unavailable';
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+}

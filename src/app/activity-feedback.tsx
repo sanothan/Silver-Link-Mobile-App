@@ -19,7 +19,7 @@ import {
 } from '../services/feedbackValidation';
 import type { FeedbackField } from '../services/feedbackValidation';
 import type { ReportViewer } from '../services/reportAccess';
-import { colors } from '../theme/Colors';
+import { colors } from '../theme/colors';
 import { RATING_OPTIONS } from '../types/feedback';
 import type { ActivitySummary, FeedbackDraft } from '../types/feedback';
 import { formatRelativeTime } from '../utils/time';

@@ -1,0 +1,756 @@
+import { type Href, useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  AppBackground,
+  BottomActionBar,
+  RequestHeader,
+  RequestProgress,
+  StatusChip,
+  StepHeading,
+} from "../../components/RequestFlowUI";
+import { DateTimeFields } from "../../components/DateTimeFields";
+import {
+  LocationPicker,
+  type PickedLocation,
+} from "../../components/LocationPicker";
+import { useAuth } from "../../context/AuthContext";
+import { createRequest } from "../../services/requestService";
+import { colors } from "../../theme/colors";
+import type { RequestFormValues } from "../../types/request";
+
+const ACTIVITIES = [
+  [
+    "♡",
+    "Friendly Conversation",
+    "Spend time talking and enjoying companionship.",
+  ],
+  [
+    "♟",
+    "Walking Companionship",
+    "Have someone accompany you on a short walk.",
+  ],
+  ["▣", "Smartphone Help", "Get help using your phone or simple apps."],
+  ["▤", "Grocery Collection", "Get help collecting groceries or essentials."],
+  ["+", "Medicine Collection", "Get help collecting medicine from a pharmacy."],
+  ["⌁", "Online Service Help", "Get help with simple online services."],
+  [
+    "⌂",
+    "Appointment / Community Support",
+    "Company for a local activity or appointment.",
+  ],
+  ["…", "Other", "Tell us what kind of help you need."],
+] as const;
+const DURATIONS = [
+  { label: "30 minutes", minutes: 30 },
+  { label: "1 hour", minutes: 60 },
+  { label: "1–2 hours", minutes: 90 },
+  { label: "Flexible", minutes: undefined },
+];
+
+export default function Request() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [requestId, setRequestId] = useState("");
+  const [error, setError] = useState("");
+  const [activityType, setActivityType] = useState("");
+  const [location, setLocation] = useState("");
+  const [pickedLocation, setPickedLocation] = useState<PickedLocation>();
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [durationLabel, setDurationLabel] = useState("1 hour");
+  const latestStep = useRef(step);
+  useEffect(() => {
+    latestStep.current = step;
+  }, [step]);
+  const resetDraft = useCallback(() => {
+    setStep(1);
+    setSaving(false);
+    setRequestId("");
+    setError("");
+    setActivityType("");
+    setLocation("");
+    setPickedLocation(undefined);
+    setDescription("");
+    setDate("");
+    setTime("");
+    setDurationLabel("1 hour");
+  }, []);
+  // Tab screens stay mounted, so clear the completed form when this tab is revisited.
+  useFocusEffect(
+    useCallback(() => {
+      if (latestStep.current === 5) resetDraft();
+    }, [resetDraft]),
+  );
+  const duration = useMemo(
+    () => DURATIONS.find((item) => item.label === durationLabel),
+    [durationLabel],
+  );
+  const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? new Date(`${date}T12:00:00`)
+    : null;
+  function next() {
+    setError("");
+    if (step === 1 && !activityType)
+      return setError("Please choose an activity.");
+    if (step === 2 && !location.trim())
+      return setError("Please enter your area or location.");
+    if (step === 2 && description.length > 500)
+      return setError("Please keep the notes under 500 characters.");
+    if (step === 3) {
+      if (!parsedDate || Number.isNaN(parsedDate.getTime()))
+        return setError("Please enter a valid date as YYYY-MM-DD.");
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (parsedDate < today)
+        return setError("Please choose today or a future date.");
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))
+        return setError("Please enter a valid time as HH:MM.");
+    }
+    setStep((value) => Math.min(4, value + 1));
+  }
+  async function submit() {
+    if (!user || !parsedDate) return;
+    setSaving(true);
+    setError("");
+    const values: RequestFormValues = {
+      activityType,
+      location,
+      description,
+      preferredDate: parsedDate,
+      preferredTime: time,
+      durationLabel,
+      durationMinutes: duration?.minutes,
+      latitude: pickedLocation?.latitude,
+      longitude: pickedLocation?.longitude,
+    };
+    try {
+      setRequestId(await createRequest(user.uid, values));
+      setStep(5);
+    } catch {
+      setError("We couldn't save your request. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  if (step === 5)
+    return (
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <AppBackground>
+          <RequestHeader
+            title="Request Sent"
+            onBack={() => router.replace("/(elderly)")}
+          />
+          <View style={styles.success}>
+            <View style={styles.successIcon}>
+              <Text style={styles.successCheck}>✓</Text>
+            </View>
+            <Text style={styles.successTitle}>Request Sent Successfully</Text>
+            <Text style={styles.successText}>
+              We&apos;ll let you know when a suitable volunteer is found. You
+              can create as many requests as you need.
+            </Text>
+            <View style={styles.summary}>
+              <Text style={styles.summaryLabel}>REQUEST</Text>
+              <Text style={styles.summaryValue}>{activityType}</Text>
+              <Text style={styles.summaryMeta}>
+                {date} at {time}
+              </Text>
+              <StatusChip status="pending" />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.trackButton}
+              onPress={() =>
+                router.push(`/(elderly)/request-details/${requestId}` as Href)
+              }
+            >
+              <Text style={styles.trackText}>Track Request</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.homeButton}
+              onPress={resetDraft}
+            >
+              <Text style={styles.homeText}>Create Another Request</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.homeLink}
+              onPress={() => router.replace("/(elderly)")}
+            >
+              <Text style={styles.homeLinkText}>Back to Home</Text>
+            </Pressable>
+          </View>
+        </AppBackground>
+      </SafeAreaView>
+    );
+  const back = () =>
+    step === 1 ? router.back() : setStep((value) => value - 1);
+  return (
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <AppBackground>
+        <RequestHeader
+          title={
+            [
+              "",
+              "Select Activity",
+              "Location & Details",
+              "Date & Time",
+              "Review Request",
+            ][step]
+          }
+          onBack={back}
+        />
+        <RequestProgress current={step} />
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.content}
+          >
+            {step === 1 ? (
+              <>
+                <StepHeading
+                  step={1}
+                  title="Choose an Activity"
+                  subtitle="What would you like help with?"
+                />
+                <View style={styles.cards}>
+                  {ACTIVITIES.map(([icon, title, body]) => {
+                    const selected = title === activityType;
+                    return (
+                      <Pressable
+                        key={title}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: selected }}
+                        style={[
+                          styles.activityCard,
+                          selected && styles.activitySelected,
+                        ]}
+                        onPress={() => setActivityType(title)}
+                      >
+                        <View style={styles.activityIcon}>
+                          <Text style={styles.activityIconText}>{icon}</Text>
+                        </View>
+                        <View style={styles.activityCopy}>
+                          <Text style={styles.activityTitle}>{title}</Text>
+                          <Text style={styles.activityBody}>{body}</Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.radio,
+                            selected && styles.radioSelected,
+                          ]}
+                        >
+                          {selected ? <View style={styles.radioDot} /> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+            {step === 2 ? (
+              <>
+                <StepHeading
+                  step={2}
+                  title="Location & Details"
+                  subtitle="Where do you need help?"
+                />
+                <Field
+                  label="Location or meeting point"
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder="Enter your area or choose it on the map"
+                />
+                <Text
+                  style={{
+                    color: colors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: "800",
+                    marginBottom: 8,
+                  }}
+                >
+                  Choose on map
+                </Text>
+                <LocationPicker
+                  value={pickedLocation}
+                  onChange={(selected) => {
+                    setPickedLocation(selected);
+                    if (selected.label) setLocation(selected.label);
+                  }}
+                />
+                <View style={{ marginTop: 22 }}>
+                  <Field
+                    label="Tell us a little more"
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Example: Please collect my medicine from the nearby pharmacy."
+                    multiline
+                  />
+                </View>
+                <View style={styles.privacy}>
+                  <Text style={styles.privacyIcon}>i</Text>
+                  <Text style={styles.privacyText}>
+                    Only share the information needed for this request.
+                  </Text>
+                </View>
+              </>
+            ) : null}
+            {step === 3 ? (
+              <>
+                <StepHeading
+                  step={3}
+                  title="Choose Date & Time"
+                  subtitle="When would you like the visit?"
+                />
+                <DateTimeFields
+                  date={date}
+                  time={time}
+                  onDateChange={setDate}
+                  onTimeChange={setTime}
+                />
+                <Text style={styles.label}>
+                  How long do you think you need help?
+                </Text>
+                <View style={styles.durationGrid}>
+                  {DURATIONS.map((item) => (
+                    <Pressable
+                      key={item.label}
+                      accessibilityRole="radio"
+                      accessibilityState={{
+                        checked: durationLabel === item.label,
+                      }}
+                      style={[
+                        styles.duration,
+                        durationLabel === item.label && styles.durationSelected,
+                      ]}
+                      onPress={() => setDurationLabel(item.label)}
+                    >
+                      <Text
+                        style={[
+                          styles.durationText,
+                          durationLabel === item.label &&
+                            styles.durationTextSelected,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
+            {step === 4 ? (
+              <>
+                <StepHeading
+                  step={4}
+                  title="Review Your Request"
+                  subtitle="Please check the details before submitting."
+                />
+                <Review
+                  label="Activity"
+                  value={activityType}
+                  onEdit={() => setStep(1)}
+                />
+                <Review
+                  label="Location"
+                  value={location}
+                  onEdit={() => setStep(2)}
+                />
+                <Review
+                  label="Date & Time"
+                  value={`${date} at ${time}`}
+                  onEdit={() => setStep(3)}
+                />
+                <Review
+                  label="Duration"
+                  value={durationLabel}
+                  onEdit={() => setStep(3)}
+                />
+                <Review
+                  label="Notes"
+                  value={description || "No extra notes"}
+                  onEdit={() => setStep(2)}
+                />
+                <View style={styles.nextCard}>
+                  <Text style={styles.nextTitle}>What happens next?</Text>
+                  <Text style={styles.nextItem}>
+                    1. We share your request with suitable volunteers.
+                  </Text>
+                  <Text style={styles.nextItem}>
+                    2. You can view the volunteer before the visit.
+                  </Text>
+                  <Text style={styles.nextItem}>
+                    3. We&apos;ll notify you when anything changes.
+                  </Text>
+                </View>
+              </>
+            ) : null}
+            {error ? (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {error}
+              </Text>
+            ) : null}
+          </ScrollView>
+          <BottomActionBar
+            backLabel={step === 1 ? "Cancel" : "Back"}
+            nextLabel={step === 4 ? "Submit Request" : "Next"}
+            nextDisabled={step === 1 && !activityType}
+            busy={saving}
+            onBack={back}
+            onNext={() => (step === 4 ? void submit() : next())}
+          />
+        </KeyboardAvoidingView>
+      </AppBackground>
+    </SafeAreaView>
+  );
+}
+function Field({
+  label,
+  multiline,
+  ...props
+}: {
+  label: string;
+  multiline?: boolean;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        accessibilityLabel={label}
+        {...props}
+        multiline={multiline}
+        maxLength={multiline ? 500 : undefined}
+        placeholderTextColor={colors.inputPlaceholder}
+        style={[styles.input, multiline && styles.multiline]}
+      />
+    </View>
+  );
+}
+function Review({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  onEdit: () => void;
+}) {
+  return (
+    <View style={styles.review}>
+      <View style={styles.reviewCopy}>
+        <Text style={styles.summaryLabel}>{label.toUpperCase()}</Text>
+        <Text style={styles.reviewValue}>{value}</Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${label}`}
+        style={styles.editButton}
+        onPress={onEdit}
+      >
+        <Text style={styles.editText}>Edit</Text>
+      </Pressable>
+    </View>
+  );
+}
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
+  content: { padding: 20, paddingBottom: 30 },
+  cards: { gap: 12 },
+  activityCard: {
+    minHeight: 116,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 19,
+    padding: 16,
+    backgroundColor: colors.surface,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  activitySelected: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  activityIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: colors.surfaceSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+  activityIconText: { color: colors.primary, fontSize: 25, fontWeight: "800" },
+  activityCopy: { flex: 1, paddingRight: 10 },
+  activityTitle: {
+    color: colors.textPrimary,
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "800",
+  },
+  activityBody: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 4,
+  },
+  radio: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colors.borderDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.surface,
+  },
+  field: { marginBottom: 20 },
+  label: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  input: {
+    minHeight: 58,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+    color: colors.textPrimary,
+    fontSize: 17,
+  },
+  multiline: { minHeight: 145, paddingTop: 15, textAlignVertical: "top" },
+  privacy: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 15,
+    backgroundColor: colors.infoLight,
+    padding: 14,
+  },
+  privacyIcon: {
+    width: 25,
+    height: 25,
+    borderRadius: 13,
+    overflow: "hidden",
+    color: colors.info,
+    borderWidth: 2,
+    borderColor: colors.info,
+    textAlign: "center",
+    lineHeight: 21,
+    fontWeight: "900",
+    marginRight: 10,
+  },
+  privacyText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "600",
+  },
+  twoColumns: { flexDirection: "row", gap: 12 },
+  column: { flex: 1 },
+  durationGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  duration: {
+    width: "48%",
+    minHeight: 58,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 8,
+  },
+  durationSelected: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  durationText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  durationTextSelected: { color: colors.primaryDark },
+  review: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 11,
+  },
+  reviewCopy: { flex: 1 },
+  summaryLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+  reviewValue: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "700",
+    marginTop: 5,
+  },
+  editButton: {
+    minWidth: 52,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editText: { color: colors.primary, fontSize: 15, fontWeight: "800" },
+  nextCard: {
+    borderRadius: 18,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    padding: 18,
+    marginTop: 7,
+  },
+  nextTitle: {
+    color: colors.primaryDark,
+    fontSize: 19,
+    fontWeight: "900",
+    marginBottom: 9,
+  },
+  nextItem: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 23,
+    marginTop: 4,
+  },
+  error: {
+    color: colors.error,
+    backgroundColor: colors.errorLight,
+    borderRadius: 13,
+    padding: 13,
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 16,
+  },
+  success: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  successIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.successLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  successCheck: { color: colors.success, fontSize: 47, fontWeight: "900" },
+  successTitle: {
+    color: colors.textPrimary,
+    fontSize: 28,
+    lineHeight: 35,
+    fontWeight: "900",
+    textAlign: "center",
+    marginTop: 22,
+  },
+  successText: {
+    color: colors.textSecondary,
+    fontSize: 17,
+    lineHeight: 25,
+    textAlign: "center",
+    marginTop: 9,
+    maxWidth: 340,
+  },
+  summary: {
+    width: "100%",
+    backgroundColor: colors.surface,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 18,
+    marginTop: 24,
+  },
+  summaryValue: {
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: "800",
+    marginTop: 7,
+  },
+  summaryMeta: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    marginTop: 7,
+    marginBottom: 13,
+  },
+  trackButton: {
+    width: "100%",
+    minHeight: 58,
+    borderRadius: 15,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 22,
+  },
+  trackText: { color: colors.textOnPrimary, fontSize: 18, fontWeight: "800" },
+  homeButton: {
+    width: "100%",
+    minHeight: 56,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: colors.borderDark,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 11,
+  },
+  homeText: { color: colors.textSecondary, fontSize: 17, fontWeight: "800" },
+  homeLink: {
+    minHeight: 48,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 3,
+  },
+  homeLinkText: { color: colors.primary, fontSize: 16, fontWeight: "800" },
+});
