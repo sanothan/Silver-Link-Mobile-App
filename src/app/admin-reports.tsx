@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,7 @@ import { getCurrentViewer } from '../services/currentUser';
 import { ReportAccessError, isAdmin } from '../services/reportAccess';
 import type { ReportViewer } from '../services/reportAccess';
 import { getReportsForAdmin } from '../services/reportService';
-import { colors } from '../theme/Colors';
+import { colors } from '../theme/colors';
 import { REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from '../types/report';
 import type { ReportRecord, ReportStatus } from '../types/report';
 import { formatRelativeTime } from '../utils/time';
@@ -141,7 +141,7 @@ export default function AdminReportsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Review report: ${REPORT_CATEGORY_LABEL[report.category]}, ${REPORT_STATUS_LABEL[report.status]}`}
                 style={[styles.card, report.urgent && styles.cardUrgent]}
-                onPress={() => router.push({ pathname: '/admin-report-detail', params: { id: report.id } })}
+                onPress={() => router.push(`/admin-report-detail?id=${report.id}` as Href)}
               >
                 <View style={styles.cardTop}>
                   <Text style={styles.cardTitle}>{REPORT_CATEGORY_LABEL[report.category]}</Text>

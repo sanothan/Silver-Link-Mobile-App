@@ -13,7 +13,7 @@ import {
   validateReportDraft,
 } from '../services/reportValidation';
 import type { ReportField } from '../services/reportValidation';
-import { colors } from '../theme/Colors';
+import { colors } from '../theme/colors';
 import { REPORT_CATEGORIES } from '../types/report';
 import type { ReportCategory, ReportDraft, ReportSubjectOption } from '../types/report';
 

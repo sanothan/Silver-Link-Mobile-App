@@ -19,7 +19,7 @@ import type { ReportViewer } from '../services/reportAccess';
 import { ReportNotFoundError, TriageValidationError, applyReportTriage, getReportForAdmin } from '../services/reportService';
 import { RESOLUTION_NOTE_MAX_LENGTH, closesReport } from '../services/reportTriage';
 import type { TriageField } from '../services/reportTriage';
-import { colors } from '../theme/Colors';
+import { colors } from '../theme/colors';
 import { REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL, REPORT_TRIAGE_STATUSES } from '../types/report';
 import type { ReportRecord, ReportStatus } from '../types/report';
 import { formatRelativeTime } from '../utils/time';

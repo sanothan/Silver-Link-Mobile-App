@@ -16,7 +16,7 @@ import {
 import { formatRatingSummary } from '../services/volunteerRatingSummary';
 import { RATING_COMMENT_MAX_LENGTH, validateVolunteerRatingDraft } from '../services/volunteerRatingValidation';
 import type { VolunteerRatingField } from '../services/volunteerRatingValidation';
-import { colors } from '../theme/Colors';
+import { colors } from '../theme/colors';
 import type { ActivitySummary } from '../types/feedback';
 import { VOLUNTEER_RATING_SCALE, emptyVolunteerRatingDraft } from '../types/volunteerRating';
 import type { VolunteerRatingDraft, VolunteerRatingSummary } from '../types/volunteerRating';
