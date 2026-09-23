@@ -1,10 +1,11 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, type DocumentData, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { getVolunteerAvailability } from './volunteerAvailabilityService';
-import type { VolunteerActivity, VolunteerActivityStatus, VolunteerDashboardData, VolunteerImpact, VolunteerOpportunity, VolunteerUpdate, VolunteerVerificationStatus } from '../types/volunteer';
+import type { VolunteerActivity, VolunteerActivityStatus, VolunteerDashboardData, VolunteerOpportunity, VolunteerUpdate, VolunteerVerificationStatus } from '../types/volunteer';
+import { deriveVolunteerImpact } from './volunteerImpactStats';
 
 const OPEN_REQUEST_STATUSES = ['pending', 'open', 'available'];
-const ACTIVE_ACTIVITY_STATUSES: VolunteerActivityStatus[] = ['accepted', 'scheduled', 'ready_to_start', 'in_progress'];
+const ACTIVE_ACTIVITY_STATUSES: VolunteerActivityStatus[] = ['accepted', 'scheduled', 'in_progress'];
 
 function asDate(value: unknown): Date | undefined {
   if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') return value.toDate();
@@ -33,20 +34,22 @@ async function safelyDocs(operation: () => Promise<QuerySnapshot<DocumentData>>)
 
 export async function getVolunteerDashboard(uid: string, userStatus?: string): Promise<VolunteerDashboardData> {
   if (!db) throw new Error('Firebase is not configured.');
-  const [profileSnapshot, statsSnapshot, availabilityEntries, opportunitySnapshots, assignmentSnapshots, notificationSnapshots] = await Promise.all([
+  const [profileSnapshot, availabilityEntries, opportunitySnapshots, assignmentSnapshots, completedSnapshots, notificationSnapshots] = await Promise.all([
     safely(() => getDoc(doc(db!, 'volunteerProfiles', uid)), null),
-    safely(() => getDoc(doc(db!, 'volunteerStats', uid)), null),
     safely(() => getVolunteerAvailability(uid), []),
     safelyDocs(() => getDocs(query(collection(db!, 'requests'), where('status', 'in', OPEN_REQUEST_STATUSES), limit(3)))),
     safelyDocs(() => getDocs(query(collection(db!, 'requestAssignments'), where('volunteerId', '==', uid), limit(10)))),
+    safelyDocs(() => getDocs(query(collection(db!, 'requests'), where('assignedVolunteerId', '==', uid), where('status', '==', 'completed'), limit(100)))),
     safelyDocs(() => getDocs(query(collection(db!, 'notifications'), where('userId', '==', uid), orderBy('createdAt', 'desc'), limit(3)))),
   ]);
 
   const profileData = profileSnapshot?.data();
   const rawVerification = asText(profileData?.verificationStatus)?.toLowerCase();
   const verificationStatus: VolunteerVerificationStatus = rawVerification === 'verified' || rawVerification === 'pending' || rawVerification === 'rejected' ? rawVerification : userStatus === 'active' ? 'unverified' : 'pending';
-  const statsData = statsSnapshot?.data();
-  const impact: VolunteerImpact | null = statsData ? { completedActivities: asNumber(statsData.completedActivities), volunteerHours: asNumber(statsData.volunteerHours), peopleSupported: asNumber(statsData.peopleSupported) } : null;
+  const impact = deriveVolunteerImpact(completedSnapshots.map((snapshot) => {
+    const data = snapshot.data();
+    return { id: snapshot.id, createdBy: asText(data.createdBy) || '', status: 'completed', durationMinutes: asNumber(data.durationMinutes) } as any;
+  }));
   const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
   const availability = availabilityEntries.find((item) => item.isAvailable && item.date >= startOfToday) ?? null;
   const opportunities = opportunitySnapshots.map(opportunityFromSnapshot);
