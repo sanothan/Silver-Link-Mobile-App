@@ -32,6 +32,8 @@ import { colors } from "../../../theme/colors";
 import {
   CANCELLABLE_REQUEST_STATUSES,
   EDITABLE_REQUEST_STATUSES,
+  REQUEST_LIFECYCLE_STAGES,
+  requestLifecycleProgress,
   type CompanionshipRequest,
   type RequestStatus,
 } from "../../../types/request";
@@ -300,14 +302,7 @@ function VolunteerCard({
   );
 }
 function Timeline({ status }: { status: RequestStatus }) {
-  const stages: { key: RequestStatus; label: string }[] = [
-    { key: "pending", label: "Request Submitted" },
-    { key: "accepted", label: "Volunteer Found" },
-    { key: "scheduled", label: "Visit Scheduled" },
-    { key: "in_progress", label: "Visit In Progress" },
-    { key: "completed", label: "Completed" },
-  ];
-  const current = stages.findIndex((stage) => stage.key === status);
+  const current = requestLifecycleProgress(status);
   if (status === "cancelled")
     return (
       <View style={[styles.card, styles.cancelledCard]}>
@@ -317,7 +312,7 @@ function Timeline({ status }: { status: RequestStatus }) {
   return (
     <View style={styles.card}>
       <Text style={styles.timelineTitle}>Current Status</Text>
-      {stages.map((stage, index) => {
+      {REQUEST_LIFECYCLE_STAGES.map((stage, index) => {
         const reached = index <= current;
         return (
           <View key={stage.key} style={styles.timelineRow}>

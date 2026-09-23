@@ -382,7 +382,8 @@ service cloud.firestore {
 
     match /volunteerAvailability/{availabilityId} {
       allow read: if isAdmin() ||
-        (hasPlatformAccess() && resource.data.volunteerId == request.auth.uid);
+        (hasPlatformAccess() &&
+          (resource.data.volunteerId == request.auth.uid || callerRole() == 'elderly'));
       allow create: if isRole('volunteer') &&
         request.resource.data.volunteerId == request.auth.uid;
       allow update: if isAdmin() ||
@@ -450,7 +451,10 @@ service cloud.firestore {
     match /requests/{requestId} {
       allow read: if isAdmin() ||
         (hasPlatformAccess() && resource.data.createdBy == request.auth.uid) ||
-        isRole('volunteer') ||
+        (isRole('volunteer') &&
+          ((resource.data.status == 'pending' &&
+            resource.data.get('assignedVolunteerId', null) == null) ||
+           resource.data.get('assignedVolunteerId', '') == request.auth.uid)) ||
         isLinkedCaregiver(resource.data.createdBy);
       allow create: if isRole('elderly') &&
         request.resource.data.createdBy == request.auth.uid &&
@@ -543,8 +547,8 @@ service cloud.firestore {
           get(/databases/$(database)/documents/requests/$(resource.data.requestId)).data.status == request.resource.data.status &&
           ((request.resource.data.status in ['cancelled', 'scheduled'] &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'elderConfirmedAt', 'updatedAt'])) ||
-           (resource.data.status == 'scheduled' &&
-            request.resource.data.status == 'scheduled' &&
+           (resource.data.status in ['accepted', 'scheduled'] &&
+            request.resource.data.status == resource.data.status &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scheduledAt', 'durationMinutes', 'generalLocation', 'rescheduledAt', 'updatedAt']))));
       allow delete: if isAdmin();
     }

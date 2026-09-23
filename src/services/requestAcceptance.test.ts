@@ -1,11 +1,13 @@
-import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getRequestsForLinkedElderlyUser, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus, withdrawFromActivity } from './requestService';
+import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getRequestsForLinkedElderlyUser, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus, updateRequest, withdrawFromActivity } from './requestService';
 import { createAcceptanceNotifications, createScheduleConfirmationNotifications, createStatusNotification } from './notificationService';
 import { getUserProfile } from './userService';
 import type { UserProfile } from '../types/user';
+import { getVolunteerAvailability } from './volunteerAvailabilityService';
 
 jest.mock('./firebaseConfig', () => ({ db: { id: 'test-db' }, auth: { currentUser: { uid: 'vol-a' } } }));
-jest.mock('./notificationService', () => ({ ...jest.requireActual('./notificationService'), createAcceptanceNotifications: jest.fn(async () => undefined), createScheduleConfirmationNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
+jest.mock('./notificationService', () => ({ ...jest.requireActual('./notificationService'), createAcceptanceNotifications: jest.fn(async () => undefined), createRescheduleNotifications: jest.fn(async () => undefined), createScheduleConfirmationNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
 jest.mock('./userService', () => ({ getUserProfile: jest.fn() }));
+jest.mock('./volunteerAvailabilityService', () => ({ getVolunteerAvailability: jest.fn() }));
 
 /**
  * Minimal in-memory Firestore. Documents carry a version so `runTransaction`
@@ -122,6 +124,14 @@ const capture = (promise: Promise<unknown>) => promise.then(() => 'accepted' as 
     if (!profile) throw new Error('No user profile exists for this account.');
     return profile;
   });
+  (getVolunteerAvailability as jest.Mock).mockResolvedValue([{
+    id: 'availability-1',
+    volunteerId: 'vol-a',
+    date: new Date(2030, 8, 4),
+    startTime: '09:00',
+    endTime: '13:00',
+    isAvailable: true,
+  }]);
   (createAcceptanceNotifications as jest.Mock).mockResolvedValue(undefined);
 });
 
@@ -391,6 +401,49 @@ describe('caregiver activity tracking', () => {
     expect(requests.map((item) => item.id)).toEqual(['cancelled-1', 'completed-1']);
     expect(requests[0]).toMatchObject({ status: 'cancelled', cancelledAt: new Date(2026, 7, 29) });
     expect(requests[1]).toMatchObject({ status: 'completed', completedAt: new Date(2026, 7, 28) });
+  });
+});
+
+describe('elderly rescheduling', () => {
+  const values = {
+    activityType: 'Grocery Collection',
+    description: 'Weekly shopping',
+    preferredDate: new Date(2030, 8, 4),
+    preferredTime: '10:30 AM',
+    durationMinutes: 60,
+    durationLabel: '1 hour',
+    location: 'Colombo 7',
+  };
+
+  it('updates the request and assignment schedule in one transaction', async () => {
+    seedRequest('reschedule');
+    await acceptRequest('reschedule', 'vol-a');
+
+    await updateRequest('reschedule', 'elderly-1', values);
+
+    expect((requestData('reschedule')?.preferredDate as { toDate(): Date }).toDate()).toEqual(values.preferredDate);
+    expect((assignmentData('reschedule')?.scheduledAt as { toDate(): Date }).toDate()).toEqual(values.preferredDate);
+    expect(assignmentData('reschedule')).toMatchObject({
+      durationMinutes: 60,
+      generalLocation: 'Colombo 7',
+    });
+  });
+
+  it('rejects an overlap without changing either schedule', async () => {
+    seedRequest('reschedule');
+    await acceptRequest('reschedule', 'vol-a');
+    seedRequest('conflict', {
+      status: 'scheduled',
+      assignedVolunteerId: 'vol-a',
+      preferredDate: { toDate: () => new Date(2030, 8, 4) },
+      preferredTime: '11:00 AM',
+    });
+    const originalRequestDate = requestData('reschedule')?.preferredDate;
+    const originalAssignmentDate = assignmentData('reschedule')?.scheduledAt;
+
+    await expect(updateRequest('reschedule', 'elderly-1', values)).rejects.toThrow('another activity');
+    expect(requestData('reschedule')?.preferredDate).toBe(originalRequestDate);
+    expect(assignmentData('reschedule')?.scheduledAt).toBe(originalAssignmentDate);
   });
 });
 
