@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { createAvailability, getVolunteerAvailability, removeAvailability, updateAvailability } from '../../services/volunteerAvailabilityService';
+import { overlapsAvailability } from '../../services/volunteerAvailabilityValidation';
 import { colors } from '../../theme/colors';
 import { VOLUNTEER_ACTIVITY_TYPES, VOLUNTEER_DURATION_PREFERENCES, type CreateAvailabilityData, type VolunteerAvailability } from '../../types/volunteer';
 
@@ -53,7 +54,7 @@ export default function VolunteerAvailabilityScreen() {
     if (!TIME_PATTERN.test(form.startTime)) { setFormError('Please enter a valid start time in 24-hour HH:MM format.'); return null; }
     if (!TIME_PATTERN.test(form.endTime)) { setFormError('Please enter a valid end time in 24-hour HH:MM format.'); return null; }
     if (timeValue(form.endTime) <= timeValue(form.startTime)) { setFormError('End time must be after start time.'); return null; }
-    const overlaps = activeRecords.some((record) => record.id !== editing?.id && dateKey(record.date) === form.date && timeValue(form.startTime) < timeValue(record.endTime) && timeValue(form.endTime) > timeValue(record.startTime));
+    const overlaps = overlapsAvailability({ date, startTime: form.startTime, endTime: form.endTime }, activeRecords, editing?.id);
     if (overlaps) { setFormError('This time overlaps with another availability you already added.'); return null; }
     return { values: { date, startTime: form.startTime, endTime: form.endTime, preferredActivityTypes: form.preferredActivityTypes, preferredDuration: form.preferredDuration } };
   }
