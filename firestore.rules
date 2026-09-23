@@ -450,7 +450,11 @@ service cloud.firestore {
     match /requests/{requestId} {
       allow read: if isAdmin() ||
         (hasPlatformAccess() && resource.data.createdBy == request.auth.uid) ||
-        isRole('volunteer') ||
+        // Before assignment, a volunteer may discover only an open opportunity.
+        // Once assigned, only that volunteer retains access to the request.
+        (isRole('volunteer') &&
+          ((resource.data.status == 'pending' && resource.data.get('assignedVolunteerId', null) == null) ||
+           resource.data.get('assignedVolunteerId', null) == request.auth.uid)) ||
         isLinkedCaregiver(resource.data.createdBy);
       allow create: if isRole('elderly') &&
         request.resource.data.createdBy == request.auth.uid &&
