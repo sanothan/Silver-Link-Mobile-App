@@ -1,6 +1,7 @@
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, Timestamp, updateDoc, where, type DocumentData, type DocumentReference } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import type { CreateAvailabilityData, UpdateAvailabilityData, VolunteerAvailability } from '../types/volunteer';
+import { overlapsAvailability } from './volunteerAvailabilityValidation';
 
 function requireDb() { if (!db) throw new Error('Firebase is not configured.'); return db; }
 function asDate(value: unknown): Date | undefined { return value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function' ? value.toDate() : undefined; }
@@ -32,6 +33,7 @@ async function getOwnedReference(volunteerId: string, availabilityId: string): P
 }
 
 export async function createAvailability(volunteerId: string, values: CreateAvailabilityData): Promise<string> {
+  if (overlapsAvailability(values, await getVolunteerAvailability(volunteerId))) throw new AvailabilityOverlapError();
   const result = await addDoc(availabilityCollection(), { volunteerId, ...cleanValues(values), isAvailable: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   return result.id;
 }
@@ -52,7 +54,12 @@ export async function getAvailabilityById(volunteerId: string, availabilityId: s
 }
 
 export async function updateAvailability(volunteerId: string, availabilityId: string, values: UpdateAvailabilityData): Promise<void> {
+  if (overlapsAvailability(values, await getVolunteerAvailability(volunteerId), availabilityId)) throw new AvailabilityOverlapError();
   await updateDoc(await getOwnedReference(volunteerId, availabilityId), { ...cleanValues(values), updatedAt: serverTimestamp() });
+}
+
+export class AvailabilityOverlapError extends Error {
+  constructor() { super('This time overlaps with another availability you already added.'); this.name = 'AvailabilityOverlapError'; }
 }
 
 // We retain a record rather than hard-deleting it, preserving matching/audit history.
