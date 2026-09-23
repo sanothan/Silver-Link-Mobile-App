@@ -15,7 +15,8 @@ export interface VolunteerPreferences {
 }
 
 export type VolunteerVerificationStatus = 'verified' | 'pending' | 'rejected' | 'unverified';
-export type VolunteerActivityStatus = 'accepted' | 'scheduled' | 'ready_to_start' | 'in_progress' | 'completed' | 'cancelled' | 'withdrawn';
+/** Mirrors the canonical request lifecycle; withdrawal reopens the request as `pending`. */
+export type VolunteerActivityStatus = 'accepted' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
 export interface VolunteerOpportunity {
   id: string;
