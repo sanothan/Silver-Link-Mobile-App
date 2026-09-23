@@ -1,4 +1,4 @@
-import { doesRequestMatchActivityInterest, doesRequestMatchAvailability, getMatchingRequestIds, rankRequestsByMatch } from './requestMatchingService';
+import { doesRequestMatchActivityInterest, doesRequestMatchAvailability, findScheduleConflict, getMatchingRequestIds, isScheduleWithinAvailability, rankRequestsByMatch } from './requestMatchingService';
 import { normalizeActivityTypes, REQUEST_ACTIVITY_TYPES } from '../types/request';
 import { VOLUNTEER_ACTIVITY_TYPES } from '../types/volunteer';
 import { EMPTY_FILTERS, matchesFilters } from '../components/RequestFilterModal';
@@ -66,5 +66,28 @@ describe('request availability matching', () => {
     expect(doesRequestMatchAvailability(request({ assignedVolunteerId: 'other' }), availability(), now)).toBe(false);
     expect(doesRequestMatchAvailability(request({ status: 'cancelled' }), availability(), now)).toBe(false);
     expect(doesRequestMatchAvailability(request({ preferredDate: new Date(2026, 6, 25) }), availability({ date: new Date(2026, 6, 25) }), now)).toBe(false);
+  });
+});
+
+describe('reschedule validation', () => {
+  const proposed = request({ id: 'rescheduled', status: 'scheduled', preferredTime: '3:00 PM' });
+
+  it('requires the entire rescheduled activity to fit a saved availability window', () => {
+    expect(isScheduleWithinAvailability(proposed, [availability()], now)).toBe(true);
+    expect(isScheduleWithinAvailability(
+      proposed,
+      [availability({ endTime: '15:30' })],
+      now,
+    )).toBe(false);
+  });
+
+  it('detects active overlaps but permits touching endpoints and terminal activities', () => {
+    expect(findScheduleConflict(proposed, [
+      request({ id: 'overlap', status: 'accepted', preferredTime: '3:30 PM' }),
+    ])?.id).toBe('overlap');
+    expect(findScheduleConflict(proposed, [
+      request({ id: 'touching', status: 'scheduled', preferredTime: '4:00 PM' }),
+      request({ id: 'completed', status: 'completed', preferredTime: '3:30 PM' }),
+    ])).toBeUndefined();
   });
 });

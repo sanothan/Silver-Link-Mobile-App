@@ -101,3 +101,16 @@ export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
+
+export const REQUEST_LIFECYCLE_STAGES = [
+  { key: "pending", label: "Request Submitted" },
+  { key: "accepted", label: "Volunteer Found" },
+  { key: "scheduled", label: "Visit Scheduled" },
+  { key: "in_progress", label: "Visit In Progress" },
+  { key: "completed", label: "Completed" },
+] as const satisfies readonly { key: RequestStatus; label: string }[];
+
+export function requestLifecycleProgress(status: RequestStatus): number {
+  if (status === "cancelled") return -1;
+  return REQUEST_LIFECYCLE_STAGES.findIndex((stage) => stage.key === status);
+}

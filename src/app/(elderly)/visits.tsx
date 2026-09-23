@@ -30,7 +30,7 @@ function statusStyle(status: string): { bg: string; text: string } {
     case 'pending': return { bg: colors.warningLight, text: '#92400E' };
     case 'accepted': return { bg: colors.infoLight, text: '#075985' };
     case 'scheduled': return { bg: '#EDE9FE', text: '#5B21B6' };
-    case 'started': return { bg: '#DCFCE7', text: '#166534' };
+    case 'in_progress': return { bg: '#DCFCE7', text: '#166534' };
     case 'completed': return { bg: colors.successLight, text: '#166534' };
     case 'cancelled': return { bg: colors.errorLight, text: '#991B1B' };
     default: return { bg: colors.surfaceSoft, text: colors.textSecondary };

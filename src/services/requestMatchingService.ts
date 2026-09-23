@@ -53,6 +53,62 @@ function atTime(date: Date, minutes: number): Date {
   return result;
 }
 
+export interface ScheduledActivity {
+  id: string;
+  preferredDate: Date;
+  preferredTime: string;
+  durationMinutes?: number;
+  status: CompanionshipRequest['status'];
+}
+
+export function scheduleBounds(activity: Pick<ScheduledActivity, 'preferredDate' | 'preferredTime' | 'durationMinutes'>) {
+  const startMinutes = timeToMinutes(activity.preferredTime);
+  if (startMinutes === null) return null;
+  const start = atTime(activity.preferredDate, startMinutes);
+  const duration = typeof activity.durationMinutes === 'number' && activity.durationMinutes > 0
+    ? activity.durationMinutes
+    : 0;
+  return { start, end: new Date(start.getTime() + duration * 60_000) };
+}
+
+/** Endpoints may touch (one visit ends as another starts), but intervals may not overlap. */
+export function schedulesOverlap(
+  left: Pick<ScheduledActivity, 'preferredDate' | 'preferredTime' | 'durationMinutes'>,
+  right: Pick<ScheduledActivity, 'preferredDate' | 'preferredTime' | 'durationMinutes'>,
+): boolean {
+  const leftBounds = scheduleBounds(left);
+  const rightBounds = scheduleBounds(right);
+  if (!leftBounds || !rightBounds) return false;
+  return leftBounds.start < rightBounds.end && rightBounds.start < leftBounds.end;
+}
+
+export function findScheduleConflict(
+  proposed: ScheduledActivity,
+  activities: readonly ScheduledActivity[],
+): ScheduledActivity | undefined {
+  return activities.find((activity) =>
+    activity.id !== proposed.id
+    && ['accepted', 'scheduled', 'in_progress'].includes(activity.status)
+    && schedulesOverlap(proposed, activity));
+}
+
+/** Rescheduling uses the same availability-window semantics as request matching. */
+export function isScheduleWithinAvailability(
+  proposed: ScheduledActivity,
+  availability: readonly VolunteerAvailability[],
+  now = new Date(),
+): boolean {
+  const candidate = {
+    ...proposed,
+    activityType: '',
+    createdBy: '',
+    location: '',
+    status: 'pending',
+    assignedVolunteerId: undefined,
+  } as CompanionshipRequest;
+  return availability.some((window) => doesRequestMatchAvailability(candidate, window, now));
+}
+
 /** A flexible or absent duration only needs its start time to be within the window. */
 export function requestDurationMinutes(request: CompanionshipRequest): number {
   return typeof request.durationMinutes === 'number' && request.durationMinutes > 0

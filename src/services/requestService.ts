@@ -27,6 +27,12 @@ import {
     writeWithdrawalNotifications,
 } from "./notificationService";
 import { getUserProfile } from "./userService";
+import {
+  findScheduleConflict,
+  isScheduleWithinAvailability,
+  type ScheduledActivity,
+} from "./requestMatchingService";
+import { getVolunteerAvailability } from "./volunteerAvailabilityService";
 
 function requireDb() {
   if (!db) throw new Error("Firebase is not configured.");
@@ -39,6 +45,21 @@ function asDate(value: unknown): Date | undefined {
     typeof value.toDate === "function"
     ? value.toDate()
     : undefined;
+}
+
+/** Newest meaningful lifecycle change first, with id as a stable tie-breaker. */
+export function compareRequestsNewestFirst(
+  left: CompanionshipRequest,
+  right: CompanionshipRequest,
+): number {
+  const finalTimestamp = (request: CompanionshipRequest) =>
+    (request.status === "completed" ? request.completedAt : undefined)?.getTime()
+    ?? (request.status === "cancelled" ? request.cancelledAt : undefined)?.getTime()
+    ?? request.updatedAt?.getTime()
+    ?? request.createdAt?.getTime()
+    ?? 0;
+  return finalTimestamp(right) - finalTimestamp(left)
+    || left.id.localeCompare(right.id);
 }
 function asText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -132,19 +153,7 @@ export async function getElderlyRequests(uid: string) {
   );
   return snapshot.docs
     .map(fromSnapshot)
-    .sort(
-      (a, b) =>
-        (b.completedAt?.getTime() ??
-          b.cancelledAt?.getTime() ??
-          b.updatedAt?.getTime() ??
-          b.createdAt?.getTime() ??
-          0) -
-        (a.completedAt?.getTime() ??
-          a.cancelledAt?.getTime() ??
-          a.updatedAt?.getTime() ??
-          a.createdAt?.getTime() ??
-          0),
-    );
+    .sort(compareRequestsNewestFirst);
 }
 
 export async function getRequestById(requestId: string, uid: string) {
@@ -169,7 +178,36 @@ export async function updateRequest(
     current.preferredTime !== values.preferredTime;
   if (current.status === "scheduled" && !scheduleChanged)
     throw new Error("Please choose a different date or time to reschedule.");
-  await updateDoc(doc(requireDb(), "requests", requestId), {
+
+  if (scheduleChanged && current.assignedVolunteerId) {
+    const proposed: ScheduledActivity = {
+      id: requestId,
+      preferredDate: values.preferredDate,
+      preferredTime: values.preferredTime,
+      durationMinutes: values.durationMinutes,
+      status: current.status,
+    };
+    const [availability, assignedRequests] = await Promise.all([
+      getVolunteerAvailability(current.assignedVolunteerId),
+      getElderlyRequests(uid),
+    ]);
+    if (!isScheduleWithinAvailability(proposed, availability)) {
+      throw new Error("Your volunteer is not available at that date and time.");
+    }
+    if (findScheduleConflict(
+      proposed,
+      assignedRequests.filter(
+        (request) => request.assignedVolunteerId === current.assignedVolunteerId,
+      ),
+    )) {
+      throw new Error("Your volunteer already has another activity at that time.");
+    }
+  }
+
+  const database = requireDb();
+  const requestRef = doc(database, "requests", requestId);
+  const assignment = assignmentRef(database, requestId);
+  const requestUpdate = {
     activityType: values.activityType,
     description: values.description?.trim() || null,
     preferredDate: Timestamp.fromDate(values.preferredDate),
@@ -183,17 +221,38 @@ export async function updateRequest(
       ? { rescheduledAt: serverTimestamp() }
       : {}),
     updatedAt: serverTimestamp(),
+  };
+
+  await runTransaction(database, async (transaction) => {
+    const latestSnapshot = await transaction.get(requestRef);
+    if (!latestSnapshot.exists()) throw new Error("Request not found.");
+    const latest = fromSnapshot(latestSnapshot);
+    if (latest.createdBy !== uid) throw new Error("You cannot access this request.");
+    if (!["pending", "accepted", "scheduled"].includes(latest.status))
+      throw new Error("This request can no longer be edited.");
+    if (latest.assignedVolunteerId !== current.assignedVolunteerId)
+      throw new Error("The assigned volunteer changed. Please review the request and try again.");
+
+    const assignmentSnapshot = latest.assignedVolunteerId
+      ? await transaction.get(assignment)
+      : null;
+    transaction.update(requestRef, requestUpdate);
+    if (scheduleChanged && latest.assignedVolunteerId) {
+      if (!assignmentSnapshot?.exists())
+        throw new Error("The volunteer assignment could not be found.");
+      if (assignmentSnapshot.data()?.volunteerId !== latest.assignedVolunteerId)
+        throw new Error("The volunteer assignment has changed. Please try again.");
+      transaction.update(assignment, {
+        scheduledAt: Timestamp.fromDate(values.preferredDate),
+        durationMinutes: values.durationMinutes ?? null,
+        generalLocation: values.location.trim(),
+        rescheduledAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
   });
+
   if (scheduleChanged && current.assignedVolunteerId) {
-    await updateDoc(doc(requireDb(), "requestAssignments", requestId), {
-      scheduledAt: Timestamp.fromDate(values.preferredDate),
-      durationMinutes: values.durationMinutes ?? null,
-      generalLocation: values.location.trim(),
-      rescheduledAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }).catch((cause) =>
-      console.warn("[requests] Assignment schedule could not be synchronized.", cause),
-    );
     await createRescheduleNotifications({
       elderlyId: current.createdBy,
       elderlyName: current.createdByName,
@@ -618,7 +677,5 @@ export async function getRequestsForLinkedElderlyUser(
   );
   return snapshot.docs
     .map(fromSnapshot)
-    .sort(
-      (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
-    );
+    .sort(compareRequestsNewestFirst);
 }
