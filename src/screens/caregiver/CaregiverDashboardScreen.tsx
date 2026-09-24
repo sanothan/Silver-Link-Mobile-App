@@ -17,8 +17,10 @@ import {
     getCaregiverLinks,
 } from "../../services/caregiverLinkService";
 import { getNotifications } from "../../services/notificationService";
+import { getRequestsForLinkedElderlyUser } from "../../services/requestService";
 import { colors } from "../../theme/colors";
 import type { CaregiverLinkDisplay } from "../../types/caregiver";
+import type { CompanionshipRequest } from "../../types/request";
 import { formatRelativeTime } from "../../utils/time";
 
 type VisitStatus =
@@ -141,12 +143,48 @@ function getVerificationStyle(status: VerificationStatus) {
   }
 }
 
-function getLinkedElderly(): LinkedElderly | null {
-  return null;
+function getLinkedElderly(
+  links: CaregiverLinkDisplay[],
+): LinkedElderly | null {
+  const link = links.find((item) => item.status === "accepted");
+  return link
+    ? {
+        id: link.elderlyUserId,
+        name: link.elderlyName,
+      }
+    : null;
 }
 
-function getUpcomingVisit(): UpcomingVisit | null {
-  return null;
+function getUpcomingVisit(
+  requests: CompanionshipRequest[],
+  elderlyName: string,
+): UpcomingVisit | null {
+  const request = requests
+    .filter((item) => ["accepted", "scheduled", "in_progress"].includes(item.status))
+    .sort(
+      (a, b) =>
+        (a.preferredDate?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+        (b.preferredDate?.getTime() ?? Number.MAX_SAFE_INTEGER),
+    )[0];
+  if (!request) return null;
+
+  const visitStatus: VisitStatus =
+    request.status === "accepted"
+      ? "Accepted"
+      : request.status === "scheduled"
+        ? "Scheduled"
+        : "In Progress";
+  return {
+    id: request.id,
+    activityType: request.activityType,
+    dateLabel: request.preferredDate.toLocaleDateString(),
+    timeLabel: request.preferredTime,
+    elderlyName,
+    volunteerName: request.volunteerName ?? "Volunteer not assigned",
+    volunteerPhotoLabel: request.volunteerName?.charAt(0).toUpperCase(),
+    verificationStatus: request.volunteerVerified ? "Verified" : "Pending",
+    visitStatus,
+  };
 }
 
 async function loadRecentUpdates(uid: string): Promise<DashboardUpdate[]> {
@@ -189,6 +227,9 @@ export default function CaregiverDashboardScreen() {
   const [caregiverLinks, setCaregiverLinks] = useState<CaregiverLinkDisplay[]>(
     [],
   );
+  const [linkedRequests, setLinkedRequests] = useState<CompanionshipRequest[]>(
+    [],
+  );
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   useEffect(() => {
@@ -206,6 +247,17 @@ export default function CaregiverDashboardScreen() {
         const links = await getCaregiverLinks(uid);
         if (!isActive) return;
         setCaregiverLinks(links);
+
+        const acceptedLink = links.find((link) => link.status === "accepted");
+        if (acceptedLink) {
+          const requests = await getRequestsForLinkedElderlyUser(
+            acceptedLink.elderlyUserId,
+          ).catch(() => []);
+          if (!isActive) return;
+          setLinkedRequests(requests);
+        } else {
+          setLinkedRequests([]);
+        }
 
         // Load updates (notifications)
         const recent = await loadRecentUpdates(uid).catch(() => []);
@@ -238,8 +290,10 @@ export default function CaregiverDashboardScreen() {
     return "Caregiver";
   }, [user?.displayName]);
 
-  const linkedElderly = getLinkedElderly();
-  const upcomingVisit = getUpcomingVisit();
+  const linkedElderly = getLinkedElderly(caregiverLinks);
+  const upcomingVisit = linkedElderly
+    ? getUpcomingVisit(linkedRequests, linkedElderly.name)
+    : null;
 
   const handleLinkElderly = () => {
     router.push("/link-elderly" as any);
@@ -285,6 +339,13 @@ export default function CaregiverDashboardScreen() {
     });
   };
 
+  const handleViewRequestDetails = (requestId: string, elderlyUserId: string) => {
+    router.push({
+      pathname: "caregiver-request-details/[id]" as any,
+      params: { id: requestId, elderlyUserId },
+    });
+  };
+
   const handleViewTrustedContact = (elderlyUserId: string) => {
     router.push({
       pathname: "caregiver-trusted-contact" as any,
@@ -301,11 +362,39 @@ export default function CaregiverDashboardScreen() {
     }
   };
 
-  const handlePlaceholderAction = (title: string) => {
-    Alert.alert(
-      title,
-      "This feature is coming soon for the caregiver dashboard.",
+  const handleMessage = () => {
+    const linked = caregiverLinks.find((link) => link.status === "accepted");
+    const request = linkedRequests.find(
+      (item) => linked && item.assignedVolunteerId && ["accepted", "scheduled", "in_progress"].includes(item.status),
     );
+    if (!linked || !request) {
+      Alert.alert("No active conversation", "Messaging is available after a volunteer accepts a linked activity.");
+      return;
+    }
+    router.push({
+      pathname: "caregiver-volunteer-chat/[id]" as any,
+      params: { id: request.id, elderlyUserId: linked.elderlyUserId },
+    });
+  };
+
+  const handleDashboardNavigation = (id: string) => {
+    switch (id) {
+      case "home":
+        router.replace("/home" as any);
+        break;
+      case "visits":
+        handleViewVisits();
+        break;
+      case "messages":
+        handleMessage();
+        break;
+      case "alerts":
+        router.push("/caregiver-notifications" as any);
+        break;
+      case "profile":
+        router.push("/caregiver-profile" as any);
+        break;
+    }
   };
 
   if (loading) {
@@ -393,7 +482,7 @@ export default function CaregiverDashboardScreen() {
                 <Pressable
                   accessibilityRole="button"
                   style={styles.inlineAction}
-                  onPress={() => handlePlaceholderAction("View Details")}
+                  onPress={() => handleViewRequests(linkedElderly.id)}
                 >
                   <Text style={styles.inlineActionText}>View Details</Text>
                   <Text style={styles.inlineActionArrow}>→</Text>
@@ -586,7 +675,13 @@ export default function CaregiverDashboardScreen() {
                 <Pressable
                   accessibilityRole="button"
                   style={styles.inlineAction}
-                  onPress={() => handlePlaceholderAction("View Visit")}
+                  onPress={() =>
+                    handleViewRequestDetails(
+                      upcomingVisit.id,
+                      caregiverLinks.find((link) => link.status === "accepted")
+                        ?.elderlyUserId ?? "",
+                    )
+                  }
                 >
                   <Text style={styles.inlineActionText}>View Visit</Text>
                   <Text style={styles.inlineActionArrow}>→</Text>
@@ -613,17 +708,23 @@ export default function CaregiverDashboardScreen() {
               <QuickActionCard
                 title="Message"
                 icon="💬"
-                onPress={() => handlePlaceholderAction("Message")}
+                onPress={handleMessage}
               />
               <QuickActionCard
                 title="Loved One"
                 icon="👨‍🦳"
-                onPress={() => handlePlaceholderAction("Loved One")}
+                onPress={() => {
+                  const linked = caregiverLinks.find(
+                    (link) => link.status === "accepted",
+                  );
+                  if (linked) handleViewTrustedContact(linked.elderlyUserId);
+                  else handleLinkElderly();
+                }}
               />
               <QuickActionCard
                 title="Report Concern"
                 icon="⚠"
-                onPress={() => handlePlaceholderAction("Report Concern")}
+                onPress={() => router.push("/report-concern" as any)}
               />
             </View>
           </View>
@@ -660,6 +761,7 @@ export default function CaregiverDashboardScreen() {
               key={item.id}
               accessibilityRole="button"
               style={[styles.navItem, item.active && styles.navItemActive]}
+              onPress={() => handleDashboardNavigation(item.id)}
             >
               <Text
                 style={[styles.navIcon, item.active && styles.navIconActive]}
