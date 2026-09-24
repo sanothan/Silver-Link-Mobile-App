@@ -97,6 +97,14 @@ function RootNavigator() {
         name="caregiver-volunteer-chat/[id]"
         options={{ animation: "slide_from_right" }}
       />
+      <Stack.Screen
+        name="caregiver-notifications"
+        options={{ animation: "slide_from_right" }}
+      />
+      <Stack.Screen
+        name="caregiver-profile"
+        options={{ animation: "slide_from_right" }}
+      />
       <Stack.Screen name="(elderly)" />
       <Stack.Screen name="(volunteer)" />
       <Stack.Screen name="(admin)" />
