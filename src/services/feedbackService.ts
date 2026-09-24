@@ -12,6 +12,8 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { assertCanSubmitFeedback, authorRoleFor, feedbackEligibleActivities } from './feedbackAccess';
+import { assertCanReviewAllFeedback, filterFeedback } from './feedbackAdmin';
+import type { FeedbackFilter } from './feedbackAdmin';
 import { normaliseFeedbackDraft, validateFeedbackDraft } from './feedbackValidation';
 import type { ReportViewer } from './reportAccess';
 import type { ActivityStatus, ActivitySummary, FeedbackAuthorRole, FeedbackDraft, FeedbackRecord } from '../types/feedback';
@@ -143,6 +145,26 @@ export async function getMyFeedbackForActivity(
   );
   const first = snapshot.docs[0];
   return first ? toFeedback(first.id, first.data() as Record<string, unknown>) : null;
+}
+
+/**
+ * Administrator view of every piece of feedback members have submitted, newest first.
+ *
+ * The filter is applied in memory rather than as a Firestore query, so one read serves
+ * every chip on the screen and the "needs attention" filter means exactly what
+ * `feedbackAdmin` says it means. Sorting here too keeps the collection free of the
+ * composite index an ordered, filtered query would otherwise require.
+ */
+export async function getFeedbackForAdmin(
+  viewer: ReportViewer | null,
+  filter: FeedbackFilter = 'all',
+): Promise<FeedbackRecord[]> {
+  if (!db) throw new Error('Firebase is not configured.');
+  assertCanReviewAllFeedback(viewer);
+
+  const snapshot = await getDocs(query(collection(db, FEEDBACK_COLLECTION), queryLimit(200)));
+  const records = snapshot.docs.map((item) => toFeedback(item.id, item.data() as Record<string, unknown>));
+  return filterFeedback(records, filter);
 }
 
 /** Every piece of feedback left on one activity, newest first. */

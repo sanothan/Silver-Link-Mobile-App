@@ -4,38 +4,43 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { getCurrentViewer } from '../services/currentUser';
-import { ReportAccessError, isAdmin } from '../services/reportAccess';
+import {
+  AUTHOR_ROLE_LABEL,
+  FEEDBACK_FILTERS,
+  FeedbackReviewAccessError,
+  canReviewAllFeedback,
+  isLowRated,
+  summariseFeedback,
+} from '../services/feedbackAdmin';
+import type { FeedbackFilter } from '../services/feedbackAdmin';
+import { getFeedbackForAdmin } from '../services/feedbackService';
 import type { ReportViewer } from '../services/reportAccess';
-import { getReportsForAdmin } from '../services/reportService';
 import { colors } from '../theme/colors';
-import { REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from '../types/report';
-import type { ReportRecord, ReportStatus } from '../types/report';
+import { RATING_OPTIONS } from '../types/feedback';
+import type { FeedbackRecord } from '../types/feedback';
 import { formatRelativeTime } from '../utils/time';
 
 type LoadState = 'loading' | 'ready' | 'denied' | 'error';
 
-const FILTERS: { value: ReportStatus | 'all'; label: string }[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'under_review', label: 'Under review' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'dismissed', label: 'Dismissed' },
-  { value: 'all', label: 'All' },
-];
+const RATING_LABEL: Record<number, string> = RATING_OPTIONS.reduce(
+  (labels, option) => ({ ...labels, [option.value]: option.label }),
+  {} as Record<number, string>,
+);
 
-export default function AdminReportsScreen() {
+export default function AdminFeedbackScreen() {
   const router = useRouter();
   const [state, setState] = useState<LoadState>('loading');
   const [viewer, setViewer] = useState<ReportViewer | null>(null);
-  const [reports, setReports] = useState<ReportRecord[]>([]);
-  const [filter, setFilter] = useState<ReportStatus | 'all'>('open');
+  const [feedback, setFeedback] = useState<FeedbackRecord[]>([]);
+  const [filter, setFilter] = useState<FeedbackFilter>('all');
 
-  const load = useCallback(async (current: ReportViewer | null, status: ReportStatus | 'all') => {
+  const load = useCallback(async (current: ReportViewer | null, selected: FeedbackFilter) => {
     setState('loading');
     try {
-      setReports(await getReportsForAdmin(current, status === 'all' ? undefined : status));
+      setFeedback(await getFeedbackForAdmin(current, selected));
       setState('ready');
     } catch (error) {
-      setState(error instanceof ReportAccessError ? 'denied' : 'error');
+      setState(error instanceof FeedbackReviewAccessError ? 'denied' : 'error');
     }
   }, []);
 
@@ -45,7 +50,7 @@ export default function AdminReportsScreen() {
       const current = await getCurrentViewer();
       if (!active) return;
       setViewer(current);
-      if (!isAdmin(current)) {
+      if (!canReviewAllFeedback(current)) {
         setState('denied');
         return;
       }
@@ -56,7 +61,7 @@ export default function AdminReportsScreen() {
     };
   }, [filter, load]);
 
-  // Returning from the detail screen should show the status the administrator just saved.
+  // Coming back from another screen should show anything submitted in the meantime.
   const firstFocus = useRef(true);
   useFocusEffect(
     useCallback(() => {
@@ -64,7 +69,7 @@ export default function AdminReportsScreen() {
         firstFocus.current = false;
         return;
       }
-      if (isAdmin(viewer)) void load(viewer, filter);
+      if (canReviewAllFeedback(viewer)) void load(viewer, filter);
     }, [filter, load, viewer]),
   );
 
@@ -74,7 +79,7 @@ export default function AdminReportsScreen() {
         <View style={styles.center}>
           <Text style={styles.centerHeading}>Administrators only</Text>
           <Text style={styles.centerText}>
-            Safety reports contain private information about the people who filed them, so only
+            Feedback names the people who wrote it and the activities it is about, so only
             administrators can open this screen.
           </Text>
         </View>
@@ -87,7 +92,7 @@ export default function AdminReportsScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centerText}>Loading reports...</Text>
+          <Text style={styles.centerText}>Loading feedback...</Text>
         </View>
       </SafeAreaView>
     );
@@ -97,7 +102,7 @@ export default function AdminReportsScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.centerHeading}>We could not load safety reports.</Text>
+          <Text style={styles.centerHeading}>We could not load submitted feedback.</Text>
           <Pressable accessibilityRole="button" style={styles.retryButton} onPress={() => void load(viewer, filter)}>
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
@@ -106,14 +111,25 @@ export default function AdminReportsScreen() {
     );
   }
 
+  const summary = summariseFeedback(feedback);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Safety reports</Text>
-        <Text style={styles.subtitle}>Reports submitted by SilverLink members, newest first.</Text>
+        <Text style={styles.title}>Activity feedback</Text>
+        <Text style={styles.subtitle}>What members, caregivers and volunteers said about completed activities.</Text>
+
+        <View style={styles.summaryRow}>
+          <SummaryTile label="Showing" value={String(summary.total)} />
+          <SummaryTile
+            label="Average rating"
+            value={summary.averageRating === null ? 'No ratings' : `${summary.averageRating}/5`}
+          />
+          <SummaryTile label="Needs attention" value={String(summary.lowRated)} tone={summary.lowRated > 0} />
+        </View>
 
         <View style={styles.filterRow}>
-          {FILTERS.map((option) => (
+          {FEEDBACK_FILTERS.map((option) => (
             <Pressable
               key={option.value}
               accessibilityRole="button"
@@ -130,68 +146,59 @@ export default function AdminReportsScreen() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open activity feedback"
+          accessibilityLabel="Open safety reports"
           style={styles.linkCard}
-          onPress={() => router.push('/admin-feedback' as Href)}
+          onPress={() => router.push('/(admin)/reports' as Href)}
         >
-          <Text style={styles.linkCardTitle}>Activity feedback</Text>
-          <Text style={styles.linkCardBody}>Read what members said about completed activities.</Text>
-          <Text style={styles.openLink}>Open feedback &rsaquo;</Text>
+          <Text style={styles.linkCardTitle}>Safety reports</Text>
+          <Text style={styles.linkCardBody}>Review concerns members raised and record how they were resolved.</Text>
+          <Text style={styles.openLink}>Open reports &rsaquo;</Text>
         </Pressable>
 
-        {reports.length === 0 ? (
+        {feedback.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Nothing to review</Text>
-            <Text style={styles.emptyBody}>There are no reports matching this filter.</Text>
+            <Text style={styles.emptyTitle}>Nothing to read yet</Text>
+            <Text style={styles.emptyBody}>There is no feedback matching this filter.</Text>
           </View>
         ) : (
           <View style={styles.cards}>
-            {reports.map((report) => (
-              <Pressable
-                key={report.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Review report: ${REPORT_CATEGORY_LABEL[report.category]}, ${REPORT_STATUS_LABEL[report.status]}`}
-                style={[styles.card, report.urgent && styles.cardUrgent]}
-                onPress={() => router.push(`/admin-report-detail?id=${report.id}` as Href)}
-              >
-                <View style={styles.cardTop}>
-                  <Text style={styles.cardTitle}>{REPORT_CATEGORY_LABEL[report.category]}</Text>
-                  <View style={[styles.badge, report.urgent ? styles.badgeUrgent : styles.badgeNormal]}>
-                    <Text style={[styles.badgeText, report.urgent ? styles.badgeTextUrgent : styles.badgeTextNormal]}>
-                      {report.urgent ? 'High priority' : REPORT_STATUS_LABEL[report.status]}
-                    </Text>
+            {feedback.map((entry) => {
+              const low = isLowRated(entry);
+              return (
+                <View key={entry.id} style={[styles.card, low && styles.cardLow]}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.cardTitle}>{entry.activityTitle || 'Activity request'}</Text>
+                    <View style={[styles.badge, low ? styles.badgeLow : styles.badgeNormal]}>
+                      <Text style={[styles.badgeText, low ? styles.badgeTextLow : styles.badgeTextNormal]}>
+                        {entry.rating === null ? 'No rating' : `${entry.rating}/5`}
+                      </Text>
+                    </View>
                   </View>
+
+                  <Text style={styles.cardDetail}>
+                    {AUTHOR_ROLE_LABEL[entry.authorRole]} - {formatRelativeTime(entry.createdAt)}
+                  </Text>
+                  {entry.rating === null ? null : (
+                    <Text style={styles.cardDetail}>Rated {RATING_LABEL[entry.rating] ?? `${entry.rating} of 5`}</Text>
+                  )}
+
+                  <Text style={styles.message}>{entry.comment || 'No comment left.'}</Text>
                 </View>
-
-                <Text style={styles.cardDetail}>
-                  {formatRelativeTime(report.createdAt)} - {REPORT_STATUS_LABEL[report.status]}
-                </Text>
-                <Text style={styles.cardDetail}>
-                  Reported by {report.reporterRole || 'member'} ({report.reporterId ?? 'identity withheld'})
-                </Text>
-                {report.subject.type === 'none' ? null : (
-                  <Text style={styles.cardSubject}>
-                    About {report.subject.type === 'user' ? 'member' : 'activity'}: {report.subject.label || report.subject.id}
-                  </Text>
-                )}
-
-                <Text style={styles.message} numberOfLines={3}>
-                  {report.description || 'No description provided.'}
-                </Text>
-
-                {report.adminNote ? (
-                  <Text style={styles.noteLine} numberOfLines={2}>
-                    Latest note: {report.adminNote}
-                  </Text>
-                ) : null}
-
-                <Text style={styles.openLink}>Review and update &rsaquo;</Text>
-              </Pressable>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: boolean }) {
+  return (
+    <View style={[styles.summaryTile, tone && styles.summaryTileAlert]}>
+      <Text style={[styles.summaryValue, tone && styles.summaryValueAlert]}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -213,7 +220,22 @@ const styles = StyleSheet.create({
   retryText: { color: colors.textOnPrimary, fontSize: 16, fontWeight: '800' },
   title: { fontSize: 24, lineHeight: 30, fontWeight: '800', color: colors.textPrimary },
   subtitle: { fontSize: 15, lineHeight: 21, color: colors.textSecondary, marginTop: 4 },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16, marginBottom: 18 },
+  summaryRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  summaryTile: {
+    flex: 1,
+    minHeight: 82,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 12,
+    justifyContent: 'center',
+  },
+  summaryTileAlert: { borderColor: colors.error, backgroundColor: colors.errorLight },
+  summaryValue: { color: colors.textPrimary, fontSize: 20, lineHeight: 26, fontWeight: '800' },
+  summaryValueAlert: { color: colors.error },
+  summaryLabel: { color: colors.textSecondary, fontSize: 13, lineHeight: 18, fontWeight: '700', marginTop: 2 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16, marginBottom: 16 },
   filterChip: {
     minHeight: 40,
     borderRadius: 999,
@@ -238,19 +260,17 @@ const styles = StyleSheet.create({
   linkCardBody: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 4 },
   cards: { gap: 12 },
   card: { backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 17 },
-  cardUrgent: { borderColor: colors.error, backgroundColor: colors.errorLight },
+  cardLow: { borderColor: colors.error, backgroundColor: colors.errorLight },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
   cardTitle: { flex: 1, color: colors.textPrimary, fontSize: 16, lineHeight: 22, fontWeight: '800' },
   cardDetail: { color: colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 6 },
-  cardSubject: { color: colors.textPrimary, fontSize: 14, lineHeight: 20, fontWeight: '700', marginTop: 8 },
   message: { color: colors.textPrimary, fontSize: 14, lineHeight: 20, marginTop: 8 },
   badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeUrgent: { backgroundColor: colors.error },
+  badgeLow: { backgroundColor: colors.error },
   badgeNormal: { backgroundColor: colors.surfaceSoft },
   badgeText: { fontSize: 12, fontWeight: '800' },
-  badgeTextUrgent: { color: colors.textOnPrimary },
+  badgeTextLow: { color: colors.textOnPrimary },
   badgeTextNormal: { color: colors.textSecondary },
-  noteLine: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 8, fontStyle: 'italic' },
   openLink: { color: colors.primary, fontSize: 14, lineHeight: 20, fontWeight: '800', marginTop: 12 },
   emptyCard: {
     backgroundColor: colors.surface,

@@ -17,6 +17,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { id: 'verify', label: 'Verify', icon: '✅', href: '/(admin)/verify' as Href },
   { id: 'requests', label: 'Requests', icon: '📋' },
   { id: 'reports', label: 'Reports', icon: '⚠', href: '/(admin)/reports' as Href },
+  { id: 'feedback', label: 'Feedback', icon: '★', href: '/admin-feedback' as Href },
 ];
 
 function SummaryCardTile({ card, onPress }: { card: SummaryCard; onPress?: () => void }) {
