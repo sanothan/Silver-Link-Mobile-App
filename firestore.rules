@@ -181,6 +181,8 @@ service cloud.firestore {
       // A rating is a record of what someone thought at the time. Denying update is also
       // what makes the fixed document id an effective duplicate guard.
       allow update, delete: if false;
+    }
+
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
