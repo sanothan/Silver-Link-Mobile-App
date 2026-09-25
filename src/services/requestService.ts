@@ -21,6 +21,7 @@ import type {
 import { auth, db } from "./firebaseConfig";
 import {
     createAcceptanceNotifications,
+    createCompletionNotifications,
     createRescheduleNotifications,
     createScheduleConfirmationNotifications,
     createStatusNotification,
@@ -573,17 +574,28 @@ export async function updateAssignedRequestStatus(
   nextStatus: "in_progress" | "completed",
 ) {
   const database = requireDb();
-  const current = await getRequestForVolunteer(requestId, volunteerUid);
-  const valid =
-    (current.status === "scheduled" && nextStatus === "in_progress") ||
-    (current.status === "in_progress" && nextStatus === "completed");
-  if (!valid) throw new Error("This visit cannot move to that status.");
   const timestampField =
     nextStatus === "in_progress" ? "startedAt" : "completedAt";
-  await updateDoc(doc(database, "requests", requestId), {
-    status: nextStatus,
-    [timestampField]: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  // Read and write in one transaction so a double tap, or two devices, can
+  // only move the visit once — the loser sees the new status and throws, and
+  // therefore never sends a second round of notifications.
+  const requestRef = doc(database, "requests", requestId);
+  const current = await runTransaction(database, async (transaction) => {
+    const snapshot = await transaction.get(requestRef);
+    if (!snapshot.exists()) throw new Error("Request not found.");
+    const request = fromSnapshot(snapshot);
+    if (request.assignedVolunteerId !== volunteerUid)
+      throw new Error("This request is not assigned to you.");
+    const valid =
+      (request.status === "scheduled" && nextStatus === "in_progress") ||
+      (request.status === "in_progress" && nextStatus === "completed");
+    if (!valid) throw new Error("This visit cannot move to that status.");
+    transaction.update(requestRef, {
+      status: nextStatus,
+      [timestampField]: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return request;
   });
   await updateDoc(doc(database, "requestAssignments", requestId), {
     status: nextStatus,
@@ -595,15 +607,27 @@ export async function updateAssignedRequestStatus(
       cause,
     ),
   );
-  await createStatusNotification({
-    elderlyId: current.createdBy,
-    requestId,
-    activityType: current.activityType,
-    status: nextStatus,
-    preferredDate: current.preferredDate,
-    preferredTime: current.preferredTime,
-    volunteerId: volunteerUid,
-  }).catch((cause) =>
+  const notify =
+    nextStatus === "completed"
+      ? createCompletionNotifications({
+          elderlyId: current.createdBy,
+          elderlyName: current.createdByName,
+          caregiverId: current.caregiverId,
+          requestId,
+          activityType: current.activityType,
+          volunteerId: volunteerUid,
+          volunteerName: current.volunteerName,
+        })
+      : createStatusNotification({
+          elderlyId: current.createdBy,
+          requestId,
+          activityType: current.activityType,
+          status: nextStatus,
+          preferredDate: current.preferredDate,
+          preferredTime: current.preferredTime,
+          volunteerId: volunteerUid,
+        });
+  await notify.catch((cause) =>
     console.warn(
       "[requests] Visit updated but its notification could not be stored.",
       cause,

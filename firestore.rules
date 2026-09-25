@@ -181,6 +181,8 @@ service cloud.firestore {
       // A rating is a record of what someone thought at the time. Denying update is also
       // what makes the fixed document id an effective duplicate guard.
       allow update, delete: if false;
+    }
+
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
@@ -599,7 +601,7 @@ service cloud.firestore {
       // request is scheduled — the scheduled alert for themselves, the
       // assigned volunteer, and the linked caregiver. Assigned volunteers can
       // create accepted/started/completed alerts for the owner (and the
-      // linked caregiver for acceptance only).
+      // linked caregiver for acceptance and completion only).
       allow create: if hasPlatformAccess() && request.resource.data.read == false &&
         request.resource.data.requestId is string &&
         exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
@@ -618,7 +620,7 @@ service cloud.firestore {
           get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid &&
           (request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy ||
            request.resource.data.userId == request.auth.uid ||
-           (request.resource.data.type == 'request_accepted' && request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null))) &&
+           (request.resource.data.type in ['request_accepted', 'request_completed'] && request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.get('caregiverId', null))) &&
           ((request.resource.data.type == 'request_accepted' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'accepted') ||
            (request.resource.data.type == 'request_started' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'in_progress') ||
            (request.resource.data.type == 'request_completed' && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed'))));
