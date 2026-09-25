@@ -711,12 +711,10 @@ service cloud.firestore {
 
     // ---- complaints & safety reports ----
     match /reports/{reportId} {
-      allow read: if isAdmin() || resource.data.createdBy == request.auth.uid;
-      allow create: if hasPlatformAccess() &&
-        request.resource.data.createdBy == request.auth.uid &&
-        request.resource.data.status == 'open';
-      // Only an admin resolves a report; the reporter cannot alter it after filing.
-      allow update, delete: if isAdmin();
+      // The complete reports contract is defined above. Keeping this legacy
+      // match closed prevents its old `createdBy` schema from broadening the
+      // reporter and administrator permissions granted there.
+      allow read, create, update, delete: if false;
     }
 
     // Deny anything not explicitly matched above.
