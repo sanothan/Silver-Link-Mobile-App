@@ -31,12 +31,19 @@ export default function Login() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const canSubmit =
-    EMAIL_PATTERN.test(email.trim()) && password.length > 0 && !submitting;
 
   async function handleSignIn() {
     setError('');
     setNotice('');
+    if (submitting) return;
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      setError('Please enter a valid email address, for example name@example.com.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
     setSubmitting(true);
     try {
       await loginUser(email, password);
@@ -151,7 +158,7 @@ export default function Login() {
                       onFocus={() => setPasswordFocused(true)}
                       onBlur={() => setPasswordFocused(false)}
                       onSubmitEditing={() => {
-                        if (canSubmit) void handleSignIn();
+                        void handleSignIn();
                       }}
                     />
                     <Pressable
@@ -197,9 +204,9 @@ export default function Login() {
                 {/* Log In Button */}
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: !canSubmit, busy: submitting }}
-                  disabled={!canSubmit}
-                  style={[styles.primaryButton, !canSubmit && styles.buttonDisabled]}
+                  accessibilityState={{ disabled: submitting, busy: submitting }}
+                  disabled={submitting}
+                  style={[styles.primaryButton, submitting && styles.buttonDisabled]}
                   onPress={handleSignIn}
                 >
                   {submitting ? (
@@ -235,11 +242,11 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#E8EAFF' },
+  bg: { flex: 1, backgroundColor: colors.background },
   overlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(30,27,75,0.22)',
+    backgroundColor: colors.overlay,
   },
   safe: { flex: 1 },
   flex: { flex: 1 },
@@ -259,8 +266,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 28,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#1E1B4B',
+    borderColor: colors.textOnPrimaryMuted,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.2,
     shadowRadius: 36,
@@ -389,7 +396,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,

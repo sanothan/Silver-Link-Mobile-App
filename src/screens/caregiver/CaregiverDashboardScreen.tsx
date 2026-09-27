@@ -1233,7 +1233,7 @@ const styles = StyleSheet.create({
   },
   inlineActionDanger: {
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: colors.border,
     paddingTop: 12,
     marginTop: 12,
   },

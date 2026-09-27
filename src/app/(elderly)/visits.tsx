@@ -27,12 +27,12 @@ const FILTER_LABELS: Record<Filter, string> = {
 
 function statusStyle(status: string): { bg: string; text: string } {
   switch (status) {
-    case 'pending': return { bg: colors.warningLight, text: '#92400E' };
-    case 'accepted': return { bg: colors.infoLight, text: '#075985' };
-    case 'scheduled': return { bg: '#EDE9FE', text: '#5B21B6' };
-    case 'in_progress': return { bg: '#DCFCE7', text: '#166534' };
-    case 'completed': return { bg: colors.successLight, text: '#166534' };
-    case 'cancelled': return { bg: colors.errorLight, text: '#991B1B' };
+    case 'pending': return { bg: colors.warningLight, text: colors.warningText };
+    case 'accepted': return { bg: colors.infoLight, text: colors.infoText };
+    case 'scheduled': return { bg: colors.secondaryLight, text: colors.primaryDark };
+    case 'in_progress': return { bg: colors.successLight, text: colors.successText };
+    case 'completed': return { bg: colors.successLight, text: colors.successText };
+    case 'cancelled': return { bg: colors.errorLight, text: colors.errorText };
     default: return { bg: colors.surfaceSoft, text: colors.textSecondary };
   }
 }
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: colors.primary,
     justifyContent: 'center',
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.22,
     shadowRadius: 8,
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 20,
     gap: 8,
-    shadowColor: '#0F172A',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 24,
     justifyContent: 'center',
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.22,
     shadowRadius: 8,

@@ -52,7 +52,7 @@ export const authStyles = StyleSheet.create({
     padding: 28,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.85)',
-    shadowColor: '#1E1B4B',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.18,
     shadowRadius: 32,
@@ -170,7 +170,7 @@ export const authStyles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.28,
     shadowRadius: 16,
@@ -234,7 +234,7 @@ export const authStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  background: { flex: 1, backgroundColor: '#E8EAFF' },
+  background: { flex: 1, backgroundColor: colors.background },
   image: { opacity: 1 },
   overlay: {
     position: 'absolute',
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: 'rgba(30, 27, 75, 0.22)',
+    backgroundColor: colors.overlay,
   },
   safeArea: { flex: 1 },
   scrollContent: {

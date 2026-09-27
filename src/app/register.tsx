@@ -132,17 +132,24 @@ export default function Register() {
   const hasMinLength = password.length >= 8;
   const hasUppercase = /[A-Z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
-  const canSubmit =
-    fullName.trim().length >= 2 &&
-    EMAIL_PATTERN.test(email.trim()) &&
-    password.length >= 8 &&
-    confirmPassword === password &&
-    !submitting;
 
   async function handleRegister() {
     setError('');
-    if (!canSubmit) {
-      setError('Please check each field. Password must be at least 8 characters.');
+    if (submitting) return;
+    if (fullName.trim().length < 2) {
+      setError('Please enter your full name (at least 2 letters).');
+      return;
+    }
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      setError('Please enter a valid email address, for example name@example.com.');
+      return;
+    }
+    if (!hasMinLength) {
+      setError('Your password needs at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('The two passwords do not match. Please type them again.');
       return;
     }
     setSubmitting(true);
@@ -324,9 +331,9 @@ export default function Register() {
               {/* Submit */}
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: !canSubmit, busy: submitting }}
-                disabled={!canSubmit}
-                style={[styles.primaryButton, !canSubmit && styles.buttonDisabled]}
+                accessibilityState={{ disabled: submitting, busy: submitting }}
+                disabled={submitting}
+                style={[styles.primaryButton, submitting && styles.buttonDisabled]}
                 onPress={handleRegister}
               >
                 {submitting ? (
@@ -360,11 +367,11 @@ export default function Register() {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#E8EAFF' },
+  bg: { flex: 1, backgroundColor: colors.background },
   overlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(30,27,75,0.22)',
+    backgroundColor: colors.overlay,
   },
   safe: { flex: 1 },
   flex: { flex: 1 },
@@ -384,8 +391,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 28,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#1E1B4B',
+    borderColor: colors.textOnPrimaryMuted,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.2,
     shadowRadius: 36,
@@ -495,7 +502,7 @@ const styles = StyleSheet.create({
   infoIcon: { color: colors.info, fontSize: 14, fontWeight: '800', marginTop: 1 },
   infoText: {
     flex: 1,
-    color: '#075985',
+    color: colors.infoText,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: '600',
@@ -549,7 +556,7 @@ const styles = StyleSheet.create({
 
   /* Password checks */
   passwordChecks: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.surfaceSoft,
     borderRadius: 14,
     padding: 14,
     gap: 8,
@@ -631,7 +638,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,

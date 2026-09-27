@@ -421,13 +421,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 6,
   },
-  waitingCard: { backgroundColor: colors.primaryLight, borderColor: "#C7D2FE" },
-  scheduleCard: { backgroundColor: colors.infoLight, borderColor: "#BAE6FD" },
+  waitingCard: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  scheduleCard: { backgroundColor: colors.infoLight, borderColor: colors.infoBorder },
   scheduleActivity: { color: colors.textPrimary, fontSize: 18, fontWeight: "900" },
   waitingTitle: { color: colors.primaryDark, fontSize: 17, fontWeight: "900" },
   volunteerCard: {
     backgroundColor: colors.successLight,
-    borderColor: "#BBF7D0",
+    borderColor: colors.successLight,
   },
   personRow: { flexDirection: "row", alignItems: "center", marginTop: 13 },
   personPhoto: {
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
   timelineSymbolReached: { color: colors.textOnPrimary },
   timelineText: { color: colors.textMuted, fontSize: 16, fontWeight: "700" },
   timelineTextReached: { color: colors.textPrimary },
-  cancelledCard: { backgroundColor: colors.errorLight, borderColor: "#FCA5A5" },
+  cancelledCard: { backgroundColor: colors.errorLight, borderColor: colors.errorBorder },
   cancelledTitle: { color: colors.error, fontSize: 17, fontWeight: "900" },
   actions: { gap: 11, marginTop: 8 },
   primary: {
