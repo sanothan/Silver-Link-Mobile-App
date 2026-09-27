@@ -2,7 +2,6 @@ import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -63,7 +62,7 @@ function statusColor(status: string): { bg: string; text: string } {
     case 'pending': return { bg: colors.warningLight, text: '#92400E' };
     case 'accepted': return { bg: colors.infoLight, text: '#075985' };
     case 'scheduled': return { bg: '#EDE9FE', text: '#5B21B6' };
-    case 'started': return { bg: '#DCFCE7', text: '#166534' };
+    case 'in_progress': return { bg: '#DCFCE7', text: '#166534' };
     case 'completed': return { bg: colors.successLight, text: '#166534' };
     case 'cancelled': return { bg: colors.errorLight, text: '#991B1B' };
     default: return { bg: colors.surfaceSoft, text: colors.textSecondary };
@@ -134,8 +133,6 @@ export default function ElderlyDashboardScreen() {
   const displayName = profile?.fullName || user?.displayName || '';
   const firstName = displayName.trim().split(/\s+/)[0];
   const requestHelp = () => router.push('/(elderly)/request');
-  const placeholder = (title: string) =>
-    Alert.alert(title, 'This feature is being prepared for SilverLink.');
 
   const loadDashboard = useCallback(async () => {
     if (!user) return;
@@ -544,9 +541,9 @@ export default function ElderlyDashboardScreen() {
             <Pressable
               accessibilityRole="button"
               style={styles.textButton}
-              onPress={() => placeholder('Safety Help')}
+              onPress={() => router.push('/report-concern' as Href)}
             >
-              <Text style={styles.textButtonText}>Safety Help →</Text>
+              <Text style={styles.textButtonText}>Report a Concern →</Text>
             </Pressable>
           </View>
         </View>

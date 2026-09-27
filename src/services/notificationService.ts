@@ -25,18 +25,22 @@ import {
   ACCEPTANCE_NOTIFICATION_TITLE_CAREGIVER,
   ACCEPTANCE_NOTIFICATION_TITLE_VOLUNTEER,
   ACTIVITY_REMINDER_TITLE,
+  COMPLETION_NOTIFICATION_TITLE,
   RESCHEDULE_NOTIFICATION_TITLE,
   SCHEDULE_CONFIRMATION_TITLE,
   VOLUNTEER_VERIFICATION_APPROVED_TITLE,
   VOLUNTEER_VERIFICATION_REJECTED_TITLE,
   buildAcceptanceMessage,
   buildActivityReminderMessage,
+  buildCompletionMessage,
   buildRescheduleMessage,
   buildScheduleConfirmationMessage,
   buildStatusNotificationContent,
   buildVolunteerVerificationMessage,
+  completionRecipients,
   notificationTypeForStatus,
   type AcceptanceNotificationContext,
+  type CompletionNotificationContext,
   type AppNotification,
   type CaregiverLinkDecisionNotificationContext,
   type CaregiverLinkRequestNotificationContext,
@@ -441,6 +445,43 @@ export async function createStatusNotification(
       createdAt: serverTimestamp(),
     },
   );
+}
+
+/**
+ * Confirms a completed visit to the elderly user, the volunteer, and the linked
+ * caregiver (if any). Callers invoke this only after winning the transactional
+ * in_progress → completed transition, so a visit is announced exactly once;
+ * the deterministic ids are a second guard, because the rules reject
+ * rewriting an alert that already exists.
+ */
+export async function createCompletionNotifications(
+  context: CompletionNotificationContext,
+) {
+  const database = requireDb();
+  const batch = writeBatch(database);
+  const type = "request_completed" as const;
+  for (const { userId, audience } of completionRecipients(context)) {
+    batch.set(
+      doc(
+        database,
+        "notifications",
+        notificationId(context.requestId, type, audience, userId),
+      ),
+      {
+        userId,
+        audience,
+        type,
+        title: COMPLETION_NOTIFICATION_TITLE,
+        message: buildCompletionMessage(context, audience),
+        requestId: context.requestId,
+        volunteerId: context.volunteerId,
+        volunteerName: context.volunteerName ?? null,
+        read: false,
+        createdAt: serverTimestamp(),
+      },
+    );
+  }
+  await batch.commit();
 }
 
 function activityReminderPayload(reminder: ActivityReminder) {

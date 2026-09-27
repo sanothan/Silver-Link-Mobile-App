@@ -1,11 +1,11 @@
 import { acceptRequest, cancelRequest, confirmAssignedVolunteer, getOpenRequests, getRequestForVolunteer, getRequestsForLinkedElderlyUser, getVolunteerRequests, RequestAcceptanceError, updateAssignedRequestStatus, updateRequest, withdrawFromActivity } from './requestService';
-import { createAcceptanceNotifications, createScheduleConfirmationNotifications, createStatusNotification } from './notificationService';
+import { createAcceptanceNotifications, createCompletionNotifications, createScheduleConfirmationNotifications, createStatusNotification } from './notificationService';
 import { getUserProfile } from './userService';
 import type { UserProfile } from '../types/user';
 import { getVolunteerAvailability } from './volunteerAvailabilityService';
 
 jest.mock('./firebaseConfig', () => ({ db: { id: 'test-db' }, auth: { currentUser: { uid: 'vol-a' } } }));
-jest.mock('./notificationService', () => ({ ...jest.requireActual('./notificationService'), createAcceptanceNotifications: jest.fn(async () => undefined), createRescheduleNotifications: jest.fn(async () => undefined), createScheduleConfirmationNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
+jest.mock('./notificationService', () => ({ ...jest.requireActual('./notificationService'), createAcceptanceNotifications: jest.fn(async () => undefined), createCompletionNotifications: jest.fn(async () => undefined), createRescheduleNotifications: jest.fn(async () => undefined), createScheduleConfirmationNotifications: jest.fn(async () => undefined), createStatusNotification: jest.fn(async () => undefined) }));
 jest.mock('./userService', () => ({ getUserProfile: jest.fn() }));
 jest.mock('./volunteerAvailabilityService', () => ({ getVolunteerAvailability: jest.fn() }));
 
@@ -329,7 +329,19 @@ describe('volunteer visit progress notifications', () => {
     expect(createStatusNotification).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'r1', status: 'in_progress', volunteerId: 'vol-a' }));
     await updateAssignedRequestStatus('r1', 'vol-a', 'completed');
     expect(requestData('r1')?.status).toBe('completed');
-    expect(createStatusNotification).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'r1', status: 'completed', volunteerId: 'vol-a' }));
+    expect(createCompletionNotifications).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: 'r1', elderlyId: 'elderly-1', volunteerId: 'vol-a', caregiverId: 'caregiver-1', activityType: 'Grocery Collection',
+    }));
+    expect(createStatusNotification).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'completed' }));
+  });
+
+  it('sends completion notifications only once when a visit is completed twice', async () => {
+    seedRequest('r1'); await acceptRequest('r1', 'vol-a'); await confirmAssignedVolunteer('r1', 'elderly-1');
+    await updateAssignedRequestStatus('r1', 'vol-a', 'in_progress');
+    (createCompletionNotifications as jest.Mock).mockClear();
+    await updateAssignedRequestStatus('r1', 'vol-a', 'completed');
+    await expect(updateAssignedRequestStatus('r1', 'vol-a', 'completed')).rejects.toThrow('cannot move');
+    expect(createCompletionNotifications).toHaveBeenCalledTimes(1);
   });
 
   it('rejects an invalid or unassigned volunteer transition', async () => {

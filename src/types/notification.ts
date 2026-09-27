@@ -270,3 +270,46 @@ export function buildStatusNotificationContent(
       };
   }
 }
+
+export const COMPLETION_NOTIFICATION_TITLE = "Visit Completed";
+
+export interface CompletionNotificationContext {
+  elderlyId: string;
+  elderlyName?: string;
+  caregiverId?: string;
+  requestId: string;
+  activityType: string;
+  volunteerId: string;
+  volunteerName?: string;
+}
+
+export function buildCompletionMessage(
+  context: CompletionNotificationContext,
+  audience: NotificationAudience,
+): string {
+  const withVolunteer = context.volunteerName
+    ? ` with ${context.volunteerName}`
+    : "";
+  if (audience === "caregiver") {
+    const owner = context.elderlyName
+      ? `${context.elderlyName}'s`
+      : "Your linked family member's";
+    return `${owner} ${context.activityType} visit${withVolunteer} has been completed and recorded.`;
+  }
+  if (audience === "volunteer")
+    return `Your ${context.activityType} visit has been completed and recorded. Thank you for volunteering!`;
+  return `Your ${context.activityType} visit${withVolunteer} has been completed and recorded.`;
+}
+
+/** Every party to a completed visit, with the caregiver only when one is linked. */
+export function completionRecipients(
+  context: CompletionNotificationContext,
+): { userId: string; audience: NotificationAudience }[] {
+  const recipients: { userId: string; audience: NotificationAudience }[] = [
+    { userId: context.elderlyId, audience: "elderly" },
+    { userId: context.volunteerId, audience: "volunteer" },
+  ];
+  if (context.caregiverId && context.caregiverId !== context.elderlyId)
+    recipients.push({ userId: context.caregiverId, audience: "caregiver" });
+  return recipients;
+}

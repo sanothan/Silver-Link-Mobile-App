@@ -76,6 +76,10 @@ function RootNavigator() {
         options={{ animation: "slide_from_right" }}
       />
       <Stack.Screen name="account-status" />
+      <Stack.Screen
+        name="report-concern"
+        options={{ animation: "slide_from_right" }}
+      />
       <Stack.Screen name="home" />
       <Stack.Screen
         name="link-elderly"
