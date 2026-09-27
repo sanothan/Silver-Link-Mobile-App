@@ -644,9 +644,9 @@ const styles = StyleSheet.create({
   editText: { color: colors.primary, fontSize: 15, fontWeight: "800" },
   nextCard: {
     borderRadius: 18,
-    backgroundColor: "#F5F3FF",
+    backgroundColor: colors.secondaryLight,
     borderWidth: 1,
-    borderColor: "#DDD6FE",
+    borderColor: colors.secondaryBorder,
     padding: 18,
     marginTop: 7,
   },

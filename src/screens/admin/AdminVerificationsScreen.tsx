@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   statusBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   statusBadgeText: { fontSize: 12, fontWeight: '800' },
   badgeWarning: { backgroundColor: colors.warningLight },
-  badgeWarningText: { color: '#92400E' },
+  badgeWarningText: { color: colors.warningText },
   badgeSuccess: { backgroundColor: colors.successLight },
   badgeSuccessText: { color: colors.success },
   badgeError: { backgroundColor: colors.errorLight },

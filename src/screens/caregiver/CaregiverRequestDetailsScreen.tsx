@@ -12,21 +12,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 import { hasAcceptedCaregiverLink } from "../../services/caregiverLinkService";
 import { getRequestById } from "../../services/requestService";
-import { colors } from "../../theme/colors";
+import { colors, statusColors } from "../../theme/colors";
 import { canChatForStatus } from "../../types/chat";
 import {
     type CompanionshipRequest,
     REQUEST_STATUS_LABELS,
 } from "../../types/request";
 
-const STATUS_CHIP_COLORS: Record<string, { bg: string; text: string }> = {
-  pending: { bg: "#DBEAFE", text: "#1E40AF" },
-  accepted: { bg: "#DBEAFE", text: "#1E40AF" },
-  scheduled: { bg: "#D1FAE5", text: "#065F46" },
-  in_progress: { bg: "#FEF3C7", text: "#92400E" },
-  completed: { bg: "#F3E8FF", text: "#5B21B6" },
-  cancelled: { bg: "#FEE2E2", text: "#7F1D1D" },
-};
+const STATUS_CHIP_COLORS = statusColors;
 
 export default function CaregiverRequestDetailsScreen() {
   const { id, elderlyUserId } = useLocalSearchParams<{
@@ -453,7 +446,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: colors.border,
   },
   backButton: {
     fontSize: 16,
@@ -524,7 +517,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
     gap: 14,
   },
   cardRow: {
@@ -559,13 +552,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   verifiedBadge: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: colors.successLight,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   verifiedText: {
-    color: "#065F46",
+    color: colors.successText,
     fontSize: 13,
     fontWeight: "600",
   },

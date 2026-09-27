@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: "#C7D2FE",
+    borderColor: colors.primaryBorder,
     padding: 17,
     marginTop: 14,
   },

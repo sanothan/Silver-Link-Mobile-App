@@ -93,18 +93,18 @@ export default function Welcome() {
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: '#E8EAFF' },
+  bg: { flex: 1, backgroundColor: colors.background },
   overlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(30,27,75,0.28)',
+    backgroundColor: colors.overlay,
   },
   orbTopRight: {
     position: 'absolute',
     width: 340,
     height: 340,
     borderRadius: 170,
-    backgroundColor: 'rgba(139,92,246,0.16)',
+    backgroundColor: 'rgba(111,143,123,0.16)',
     top: -100,
     right: -80,
   },
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: 'rgba(79,70,229,0.14)',
+    backgroundColor: 'rgba(62,106,82,0.14)',
     bottom: -80,
     left: -80,
   },
@@ -131,8 +131,8 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     padding: 32,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#1E1B4B',
+    borderColor: colors.textOnPrimaryMuted,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.22,
     shadowRadius: 40,
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.32,
     shadowRadius: 18,
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   buttonArrow: {
-    color: 'rgba(255,255,255,0.8)',
+    color: colors.textOnPrimaryMuted,
     fontSize: 20,
   },
   secondaryButton: {

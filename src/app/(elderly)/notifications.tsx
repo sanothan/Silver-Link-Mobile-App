@@ -38,14 +38,14 @@ function iconFor(type: AppNotification['type']) {
 
 function iconBg(type: AppNotification['type']): string {
   switch (type) {
-    case 'request_accepted': return '#E0E7FF';
+    case 'request_accepted': return colors.primaryLight;
     case 'request_scheduled': return colors.infoLight;
     case 'request_rescheduled': return colors.infoLight;
     case 'activity_reminder': return colors.warningLight;
     case 'request_started': return colors.warningLight;
     case 'request_completed': return colors.successLight;
     case 'request_cancelled': return colors.errorLight;
-    case 'caregiver_link_request': return '#EDE9FE';
+    case 'caregiver_link_request': return colors.secondaryLight;
     case 'caregiver_link_accepted': return colors.successLight;
     case 'caregiver_link_rejected': return colors.errorLight;
     default: return colors.surfaceSoft;
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
     flexDirection: 'row',
-    shadowColor: '#0F172A',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 24,
     justifyContent: 'center',
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.22,
     shadowRadius: 8,
