@@ -124,6 +124,8 @@ function fromSnapshot(snapshot: {
     chatId: asText(data.chatId),
     senderId: asText(data.senderId),
     linkId: asText(data.linkId),
+    elderlyUserId: asText(data.elderlyUserId),
+    caregiverId: asText(data.caregiverId),
     volunteerId: asText(data.volunteerId),
     volunteerName: asText(data.volunteerName),
     volunteerVerified: data.volunteerVerified === true,

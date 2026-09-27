@@ -4,6 +4,7 @@ import {
   getCaregiverLinksForElderly,
   rejectCaregiverLink,
 } from "./caregiverLinkService";
+import { getNotifications } from "./notificationService";
 import {
   createCaregiverLinkDecisionNotification,
 } from "./notificationService";
@@ -135,4 +136,22 @@ it("shows accepted links as connected and hides rejected history on the caregive
   seedLink("rejected", { status: "rejected" });
   const links = await getCaregiverLinks("caregiver-1");
   expect(links.map((item) => [item.id, item.status])).toEqual([["accepted", "accepted"]]);
+});
+
+it("preserves the linked elderly id on caregiver notifications for status navigation", async () => {
+  firestore.__store.set("notifications/notice-1", {
+    userId: "caregiver-1",
+    audience: "caregiver",
+    type: "caregiver_link_accepted",
+    title: "Connection Accepted",
+    message: "Your connection request was accepted.",
+    linkId: "link-1",
+    elderlyUserId: "elderly-1",
+    read: false,
+    createdAt: new Date("2026-09-08T10:00:00Z"),
+  });
+
+  const notifications = await getNotifications("caregiver-1");
+  expect(notifications).toHaveLength(1);
+  expect(notifications[0]).toMatchObject({ linkId: "link-1", elderlyUserId: "elderly-1" });
 });

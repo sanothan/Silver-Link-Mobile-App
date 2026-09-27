@@ -28,6 +28,8 @@ export interface AppNotification {
   chatId?: string;
   senderId?: string;
   linkId?: string;
+  elderlyUserId?: string;
+  caregiverId?: string;
   volunteerId?: string;
   volunteerName?: string;
   volunteerVerified?: boolean;
