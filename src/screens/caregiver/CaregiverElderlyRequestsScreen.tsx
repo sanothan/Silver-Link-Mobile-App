@@ -13,7 +13,7 @@ import { useAuth } from "../../context/AuthContext";
 import { hasAcceptedCaregiverLink } from "../../services/caregiverLinkService";
 import { getRequestsForLinkedElderlyUser } from "../../services/requestService";
 import { getUserProfile } from "../../services/userService";
-import { colors } from "../../theme/colors";
+import { colors, statusColors } from "../../theme/colors";
 import {
     type CompanionshipRequest,
     REQUEST_STATUS_LABELS,
@@ -21,14 +21,7 @@ import {
 
 type FilterStatus = "all" | "active" | "history";
 
-const STATUS_CHIP_COLORS: Record<string, { bg: string; text: string }> = {
-  pending: { bg: "#DBEAFE", text: "#1E40AF" },
-  accepted: { bg: "#DBEAFE", text: "#1E40AF" },
-  scheduled: { bg: "#D1FAE5", text: "#065F46" },
-  in_progress: { bg: "#FEF3C7", text: "#92400E" },
-  completed: { bg: "#F3E8FF", text: "#5B21B6" },
-  cancelled: { bg: "#FEE2E2", text: "#7F1D1D" },
-};
+const STATUS_CHIP_COLORS = statusColors;
 
 export default function CaregiverElderlyRequestsScreen() {
   const { elderlyUserId } = useLocalSearchParams<{ elderlyUserId: string }>();
@@ -368,7 +361,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: colors.border,
   },
   backButton: {
     fontSize: 16,
@@ -393,13 +386,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: colors.border,
   },
   filterButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.surfaceSoft,
   },
   filterButtonActive: {
     backgroundColor: colors.primary,
@@ -426,10 +419,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: colors.border,
   },
   requestCardPressed: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.surfaceSoft,
   },
   requestCardContent: {
     flex: 1,

@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#C7D2FE",
+    borderColor: colors.primaryBorder,
     padding: 17,
     marginBottom: 22,
   },

@@ -20,9 +20,9 @@ const slides = [
   {
     id: 'companionship',
     icon: '♡',
-    iconBg: '#E0E7FF',
+    iconBg: colors.primaryLight,
     iconColor: colors.primary,
-    accentBg: '#EEF2FF',
+    accentBg: colors.primaryLight,
     title: 'Companionship Made Simple',
     description:
       'Connect with trusted volunteers for friendly conversations and small everyday support.',
@@ -30,9 +30,9 @@ const slides = [
   {
     id: 'trusted',
     icon: '✓',
-    iconBg: '#F3E8FF',
+    iconBg: colors.secondaryLight,
     iconColor: colors.secondary,
-    accentBg: '#F5F3FF',
+    accentBg: colors.secondaryLight,
     title: 'Safe and Trusted',
     description:
       'View verified volunteers and stay informed about your activities with complete peace of mind.',
@@ -40,9 +40,9 @@ const slides = [
   {
     id: 'connected',
     icon: '⌚',
-    iconBg: '#E0F2FE',
+    iconBg: colors.infoLight,
     iconColor: colors.info,
-    accentBg: '#F0F9FF',
+    accentBg: colors.infoLight,
     title: 'Volunteer Your Way',
     description:
       'Choose activities that fit your time, interests, and location.',
@@ -50,9 +50,9 @@ const slides = [
   {
     id: 'peace',
     icon: '⌂',
-    iconBg: '#DCFCE7',
+    iconBg: colors.successLight,
     iconColor: colors.success,
-    accentBg: '#F0FDF4',
+    accentBg: colors.successLight,
     title: 'Peace of Mind',
     description:
       'Request help, follow activity updates, and keep your caregiver informed.',
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
   // ── Splash ──
   splash: {
     flex: 1,
-    backgroundColor: '#F4F5FF',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 24,
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     width: 380,
     height: 380,
     borderRadius: 190,
-    backgroundColor: '#DDE1FF',
+    backgroundColor: colors.primaryLight,
     top: -130,
     right: -110,
   },
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: colors.secondaryLight,
     bottom: -80,
     left: -80,
   },
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: 'rgba(79,70,229,0.06)',
+    backgroundColor: colors.primaryLight,
     top: '30%',
     left: '20%',
   },
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.primaryLight,
     top: -100,
     right: -80,
   },
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.28,
     shadowRadius: 16,
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   buttonArrow: {
-    color: 'rgba(255,255,255,0.8)',
+    color: colors.textOnPrimaryMuted,
     fontSize: 22,
   },
 });

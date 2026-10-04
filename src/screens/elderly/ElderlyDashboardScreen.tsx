@@ -59,12 +59,12 @@ function greeting() {
 // ─── Status pill helper ───────────────────────────────────────────────────────
 function statusColor(status: string): { bg: string; text: string } {
   switch (status) {
-    case 'pending': return { bg: colors.warningLight, text: '#92400E' };
-    case 'accepted': return { bg: colors.infoLight, text: '#075985' };
-    case 'scheduled': return { bg: '#EDE9FE', text: '#5B21B6' };
-    case 'in_progress': return { bg: '#DCFCE7', text: '#166534' };
-    case 'completed': return { bg: colors.successLight, text: '#166534' };
-    case 'cancelled': return { bg: colors.errorLight, text: '#991B1B' };
+    case 'pending': return { bg: colors.warningLight, text: colors.warningText };
+    case 'accepted': return { bg: colors.infoLight, text: colors.infoText };
+    case 'scheduled': return { bg: colors.secondaryLight, text: colors.primaryDark };
+    case 'in_progress': return { bg: colors.successLight, text: colors.successText };
+    case 'completed': return { bg: colors.successLight, text: colors.successText };
+    case 'cancelled': return { bg: colors.errorLight, text: colors.errorText };
     default: return { bg: colors.surfaceSoft, text: colors.textSecondary };
   }
 }
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     padding: 24,
     marginBottom: 28,
-    shadowColor: '#3730A3',
+    shadowColor: colors.primaryDark,
     shadowOpacity: 0.28,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   heroChipText: {
-    color: 'rgba(255,255,255,0.9)',
+    color: colors.textOnPrimaryMuted,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -769,7 +769,7 @@ const styles = StyleSheet.create({
     maxWidth: 300,
   },
   heroText: {
-    color: '#C7D2FE',
+    color: colors.primaryBorder,
     fontSize: 16,
     lineHeight: 24,
     marginTop: 8,
@@ -812,7 +812,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 20,
-    shadowColor: '#0F172A',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 14,
     gap: 10,
-    shadowColor: '#0F172A',
+    shadowColor: colors.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -908,7 +908,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  quickIconBoxEmphasis: { backgroundColor: 'rgba(79,70,229,0.14)' },
+  quickIconBoxEmphasis: { backgroundColor: 'rgba(62,106,82,0.14)' },
   quickSymbol: { color: colors.textSecondary, fontSize: 24, fontWeight: '800' },
   quickSymbolEmphasis: { color: colors.primary },
   quickLabel: {
@@ -921,8 +921,8 @@ const styles = StyleSheet.create({
   quickLabelEmphasis: { color: colors.primaryDark },
 
   /* Caregiver / Safety cards */
-  caregiverCard: { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' },
-  safetyCard: { backgroundColor: colors.primaryLight, borderColor: '#C7D2FE' },
+  caregiverCard: { backgroundColor: colors.secondaryLight, borderColor: colors.secondaryBorder },
+  safetyCard: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
 
   /* Card internals */
   cardTitle: {

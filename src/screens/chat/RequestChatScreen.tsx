@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   messageText: { color: colors.textPrimary, fontSize: 16, lineHeight: 22 },
   messageTextMine: { color: colors.textOnPrimary },
   time: { color: colors.textMuted, fontSize: 11, alignSelf: 'flex-end' },
-  timeMine: { color: '#C7D2FE' },
+  timeMine: { color: colors.primaryBorder },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
   input: { flex: 1, maxHeight: 100, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12, color: colors.textPrimary, fontSize: 16, backgroundColor: colors.background },
   sendButton: { minHeight: 48, paddingHorizontal: 17, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
