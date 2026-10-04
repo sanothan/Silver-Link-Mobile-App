@@ -182,7 +182,7 @@ service cloud.firestore {
       // what makes the fixed document id an effective duplicate guard.
       allow update, delete: if false;
     }
-
+    
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
