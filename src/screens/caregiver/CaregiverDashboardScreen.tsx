@@ -363,18 +363,7 @@ export default function CaregiverDashboardScreen() {
   };
 
   const handleMessage = () => {
-    const linked = caregiverLinks.find((link) => link.status === "accepted");
-    const request = linkedRequests.find(
-      (item) => linked && item.assignedVolunteerId && ["accepted", "scheduled", "in_progress"].includes(item.status),
-    );
-    if (!linked || !request) {
-      Alert.alert("No active conversation", "Messaging is available after a volunteer accepts a linked activity.");
-      return;
-    }
-    router.push({
-      pathname: "caregiver-volunteer-chat/[id]" as any,
-      params: { id: request.id, elderlyUserId: linked.elderlyUserId },
-    });
+    router.push("/caregiver-messages" as any);
   };
 
   const handleDashboardNavigation = (id: string) => {

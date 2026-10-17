@@ -2,8 +2,8 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,6 +28,11 @@ export default function CaregiverConnections() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [updatingId, setUpdatingId] = useState<string>();
+  const [pendingDecision, setPendingDecision] = useState<{
+    item: ElderlyCaregiverLinkDisplay;
+    decision: "accepted" | "rejected";
+  }>();
+  const [notice, setNotice] = useState<{ title: string; message: string }>();
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -65,12 +70,16 @@ export default function CaregiverConnections() {
     } catch (cause) {
       const alreadyUpdated =
         cause instanceof Error && cause.message.includes("already been updated");
-      Alert.alert(
-        alreadyUpdated ? "Request already updated" : "We couldn't update this connection request.",
-        alreadyUpdated
+      setNotice({
+        title: alreadyUpdated
+          ? "Request already updated"
+          : "We couldn't update this connection request.",
+        message: alreadyUpdated
           ? "This connection request has already been updated. The list will now refresh."
-          : "Please try again.",
-      );
+          : cause instanceof Error && cause.message
+            ? cause.message
+            : "Please try again.",
+      });
       await load();
     } finally {
       setUpdatingId(undefined);
@@ -81,21 +90,7 @@ export default function CaregiverConnections() {
     item: ElderlyCaregiverLinkDisplay,
     decision: "accepted" | "rejected",
   ) => {
-    const accepting = decision === "accepted";
-    Alert.alert(
-      accepting ? "Accept caregiver connection?" : "Reject this caregiver request?",
-      accepting
-        ? "This caregiver will be able to view the SilverLink information allowed for linked caregivers."
-        : "This caregiver will not be connected to your account.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: accepting ? "Accept" : "Reject",
-          style: accepting ? "default" : "destructive",
-          onPress: () => void decide(item, decision),
-        },
-      ],
-    );
+    setPendingDecision({ item, decision });
   };
 
   const pending = items.filter((item) => item.status === "pending");
@@ -127,6 +122,66 @@ export default function CaregiverConnections() {
               ))}
             </View>
           ) : null}
+          <Modal
+            visible={Boolean(pendingDecision || notice)}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              setPendingDecision(undefined);
+              setNotice(undefined);
+            }}
+          >
+            <View style={styles.modalBackdrop}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>
+                  {notice?.title ?? (pendingDecision?.decision === "accepted"
+                    ? "Accept caregiver connection?"
+                    : "Reject this caregiver request?")}
+                </Text>
+                <Text style={styles.modalBody}>
+                  {notice?.message ?? (pendingDecision?.decision === "accepted"
+                    ? "This caregiver will be able to view the SilverLink information allowed for linked caregivers."
+                    : "This caregiver will not be connected to your account.")}
+                </Text>
+                {notice ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    style={styles.modalCloseButton}
+                    onPress={() => setNotice(undefined)}
+                  >
+                    <Text style={styles.modalConfirmText}>Close</Text>
+                  </Pressable>
+                ) : (
+                  <View style={styles.modalActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      style={styles.modalCancelButton}
+                      onPress={() => setPendingDecision(undefined)}
+                    >
+                      <Text style={styles.modalCancelText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      style={[
+                        styles.modalConfirmButton,
+                        pendingDecision?.decision === "rejected" && styles.modalRejectButton,
+                      ]}
+                      onPress={() => {
+                        if (!pendingDecision) return;
+                        const { item, decision } = pendingDecision;
+                        setPendingDecision(undefined);
+                        void decide(item, decision);
+                      }}
+                    >
+                      <Text style={styles.modalConfirmText}>
+                        {pendingDecision?.decision === "accepted" ? "Accept" : "Reject"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Modal>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Pending Caregiver Requests</Text>
@@ -246,4 +301,15 @@ const styles = StyleSheet.create({
   helper: { color: colors.textSecondary, fontSize: 16, lineHeight: 23, textAlign: "center" },
   retry: { minHeight: 54, borderRadius: 14, backgroundColor: colors.primary, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", marginTop: 8 },
   retryText: { color: colors.textOnPrimary, fontSize: 17, fontWeight: "900" },
+  modalBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "center", padding: 22 },
+  modalCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 20 },
+  modalTitle: { color: colors.textPrimary, fontSize: 19, lineHeight: 25, fontWeight: "900" },
+  modalBody: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, marginTop: 8 },
+  modalActions: { flexDirection: "row", gap: 12, marginTop: 20 },
+  modalCancelButton: { flex: 1, minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  modalCancelText: { color: colors.textSecondary, fontSize: 15, fontWeight: "800" },
+  modalConfirmButton: { flex: 1, minHeight: 50, borderRadius: 12, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  modalRejectButton: { backgroundColor: colors.error },
+  modalCloseButton: { minHeight: 50, borderRadius: 12, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginTop: 20 },
+  modalConfirmText: { color: colors.textOnPrimary, fontSize: 15, fontWeight: "800" },
 });

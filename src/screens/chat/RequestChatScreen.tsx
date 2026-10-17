@@ -17,26 +17,39 @@ export default function RequestChatScreen({ role }: { role: ChatParticipantRole 
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [chatLoading, setChatLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [chatError, setChatError] = useState(false);
   const [canSend, setCanSend] = useState(false);
   const [chatExists, setChatExists] = useState(false);
 
   const load = useCallback(async () => {
     if (!user || !id || (role === 'caregiver' && !elderlyUserId)) {
-      setError(true);
+      setError('This conversation is missing its request or linked elder information.');
       setLoading(false);
       return;
     }
     setLoading(true);
-    setError(false);
+    setError(null);
+    setChatLoading(false);
+    setChatError(false);
     try {
       const result = await getRequestChat(id, user.uid, role, elderlyUserId);
       setRequest(result.request);
       setCanSend(result.canSend);
       setChatExists(Boolean(result.chat));
-    } catch {
-      setError(true);
+      setChatLoading(Boolean(result.chat));
+    } catch (cause) {
+      const errorCode = typeof cause === 'object' && cause !== null && 'code' in cause
+        ? String(cause.code)
+        : undefined;
+      console.error('[chat] Unable to load conversation.', cause);
+      setError(errorCode === 'permission-denied' || errorCode === 'firestore/permission-denied'
+        ? 'Firestore denied access to this conversation. Deploy the latest Firestore rules and confirm you are linked to this elder or assigned to this activity.'
+        : cause instanceof Error
+          ? cause.message
+          : 'We couldn’t load this conversation. Please try again.');
+      setChatLoading(false);
     } finally {
       setLoading(false);
     }
@@ -47,8 +60,6 @@ export default function RequestChatScreen({ role }: { role: ChatParticipantRole 
   const chatId = request?.id;
   useEffect(() => {
     if (!chatId || !chatExists) return undefined;
-    setChatLoading(true);
-    setChatError(false);
     return subscribeToRequestChat(chatId, (items) => {
       setMessages(items);
       setChatLoading(false);
@@ -64,12 +75,14 @@ export default function RequestChatScreen({ role }: { role: ChatParticipantRole 
     if (request.status === 'cancelled') return 'This activity was cancelled.';
     if (!canChatForStatus(request.status)) return 'Messaging is available after a volunteer accepts this activity.';
     if (!request.assignedVolunteerId) return 'A volunteer must be assigned before messaging is available.';
+    if (role === 'volunteer' && !request.caregiverId && !chatExists)
+      return 'A linked caregiver can start this conversation from their Messages tab.';
     return '';
-  }, [request]);
+  }, [chatExists, request, role]);
 
   const send = async () => {
-    if (!user || !id || !text.trim() || !canSend || chatLoading) return;
-    setChatLoading(true);
+    if (!user || !id || !text.trim() || !canSend || chatLoading || sending) return;
+    setSending(true);
     try {
       await sendRequestChatMessage({ requestId: id, senderId: user.uid, senderRole: role, elderlyUserId, text });
       setText('');
@@ -77,12 +90,12 @@ export default function RequestChatScreen({ role }: { role: ChatParticipantRole 
     } catch {
       setChatError(true);
     } finally {
-      setChatLoading(false);
+      setSending(false);
     }
   };
 
   if (loading) return <Center><ActivityIndicator size="large" color={colors.primary} /><Text style={styles.helper}>Loading conversation…</Text></Center>;
-  if (error || !request) return <Center><Text style={styles.title}>Conversation unavailable</Text><Text style={styles.helper}>We couldn&apos;t load this conversation. Please try again.</Text><Pressable style={styles.primaryButton} onPress={() => void load()}><Text style={styles.primaryText}>Try Again</Text></Pressable></Center>;
+  if (error || !request) return <Center><Text style={styles.title}>Conversation unavailable</Text><Text style={styles.helper}>{error ?? 'We couldn’t load this conversation. Please try again.'}</Text><Pressable accessibilityRole="button" style={styles.primaryButton} onPress={() => void load()}><Text style={styles.primaryText}>Try Again</Text></Pressable></Center>;
 
   const otherName = role === 'caregiver' ? request.volunteerName || 'Assigned volunteer' : 'Caregiver';
   return <SafeAreaView style={styles.safe} edges={['top']}>
@@ -95,9 +108,9 @@ export default function RequestChatScreen({ role }: { role: ChatParticipantRole 
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.messages, !messages.length && styles.messagesEmpty]}
         renderItem={({ item }) => <MessageBubble item={item} mine={item.senderId === user?.uid} />}
-        ListEmptyComponent={<><Text style={styles.emptyTitle}>No messages yet</Text><Text style={styles.helper}>Use this chat to coordinate the activity with the volunteer.</Text></>}
+        ListEmptyComponent={<View style={styles.emptyContent}><Text style={styles.emptyTitle}>No messages yet</Text><Text style={styles.helper}>{role === 'caregiver' ? 'Use this chat to coordinate the activity with the volunteer.' : 'Use this chat to coordinate the activity with the caregiver.'}</Text></View>}
       />}
-      {canSend ? <View style={styles.composer}><TextInput accessibilityLabel="Message" value={text} onChangeText={setText} placeholder="Write a message…" placeholderTextColor={colors.textMuted} multiline style={styles.input} /><Pressable accessibilityRole="button" accessibilityLabel="Send message" disabled={!text.trim() || chatLoading} style={[styles.sendButton, (!text.trim() || chatLoading) && styles.disabled]} onPress={() => void send()}><Text style={styles.sendText}>Send</Text></Pressable></View> : null}
+      {canSend ? <View style={styles.composer}><TextInput accessibilityLabel="Message" value={text} onChangeText={setText} placeholder="Write a message…" placeholderTextColor={colors.textMuted} multiline style={styles.input} /><Pressable accessibilityRole="button" accessibilityLabel="Send message" disabled={!text.trim() || chatLoading || sending} style={[styles.sendButton, (!text.trim() || chatLoading || sending) && styles.disabled]} onPress={() => void send()}><Text style={styles.sendText}>{sending ? 'Sending…' : 'Send'}</Text></Pressable></View> : null}
     </KeyboardAvoidingView>
   </SafeAreaView>;
 }
@@ -121,6 +134,7 @@ const styles = StyleSheet.create({
   errorText: { color: colors.error, textAlign: 'center', fontSize: 14, fontWeight: '700' },
   messages: { padding: 16, gap: 10, flexGrow: 1, justifyContent: 'flex-end' },
   messagesEmpty: { justifyContent: 'center', alignItems: 'center' },
+  emptyContent: { alignItems: 'center', gap: 10 },
   messageRow: { flexDirection: 'row', justifyContent: 'flex-start' },
   messageRowMine: { justifyContent: 'flex-end' },
   bubble: { maxWidth: '82%', borderRadius: 17, paddingHorizontal: 14, paddingVertical: 10, gap: 4 },

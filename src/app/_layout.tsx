@@ -94,6 +94,10 @@ function RootNavigator() {
         options={{ animation: "slide_from_right" }}
       />
       <Stack.Screen
+        name="caregiver-messages"
+        options={{ animation: "slide_from_right" }}
+      />
+      <Stack.Screen
         name="caregiver-volunteer-chat/[id]"
         options={{ animation: "slide_from_right" }}
       />

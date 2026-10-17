@@ -238,8 +238,29 @@ service cloud.firestore {
           chat.volunteerId == request.auth.uid &&
           get(/databases/$(database)/documents/requests/$(chat.requestId)).data.assignedVolunteerId == request.auth.uid &&
           get(/databases/$(database)/documents/requests/$(chat.requestId)).data.createdBy == chat.elderlyUserId &&
-          get(/databases/$(database)/documents/requests/$(chat.requestId)).data.caregiverId == chat.caregiverId &&
           hasAcceptedCaregiver(chat.caregiverId, chat.elderlyUserId)));
+    }
+
+    // Participants need to check whether a thread exists before initializing
+    // it. Permit that get only for the linked caregiver or assigned volunteer
+    // on an active activity; it does not grant access to unrelated requests.
+    function canReadMissingRequestChat(requestId) {
+      let activityPath = /databases/$(database)/documents/requests/$(requestId);
+      let activity = get(activityPath).data;
+      let elderPath = /databases/$(database)/documents/users/$(activity.createdBy);
+      let elder = get(elderPath).data;
+      return isSignedIn() && exists(activityPath) && exists(elderPath) &&
+        isChatActive(activity.status) &&
+        ((isRole('caregiver') &&
+          isLinkedCaregiver(activity.createdBy) &&
+          (activity.get('caregiverId', null) == null ||
+            activity.caregiverId == request.auth.uid)) ||
+         (isRole('volunteer') &&
+          activity.assignedVolunteerId == request.auth.uid &&
+          elder.get('caregiverId', null) is string &&
+          hasAcceptedCaregiver(elder.caregiverId, activity.createdBy) &&
+          (activity.get('caregiverId', null) == null ||
+            activity.caregiverId == elder.caregiverId)));
     }
 
     // A volunteer may only claim a request that is *stored* as pending and
@@ -318,6 +339,7 @@ service cloud.firestore {
             .hasOnly(['fullName', 'phone', 'locality', 'preferredLanguage', 'photoUrl', 'updatedAt']) ||
            (request.resource.data.caregiverId is string &&
             (resource.data.get('caregiverId', null) == null ||
+             resource.data.get('caregiverId', '') == '' ||
              resource.data.caregiverId == request.resource.data.caregiverId) &&
             request.resource.data.caregiverLinkId is string &&
             request.resource.data.diff(resource.data).affectedKeys()
@@ -557,7 +579,11 @@ service cloud.firestore {
 
     // ---- request-specific caregiver/volunteer chats ----
     match /requestChats/{requestId} {
-      allow read: if isRequestChatParticipant(resource.data);
+      allow get: if (!exists(/databases/$(database)/documents/requestChats/$(requestId)) &&
+          canReadMissingRequestChat(requestId)) ||
+        (exists(/databases/$(database)/documents/requestChats/$(requestId)) &&
+          isRequestChatParticipant(resource.data));
+      allow list: if isRequestChatParticipant(resource.data);
       allow create: if isRequestChatParticipant(request.resource.data) &&
         get(/databases/$(database)/documents/requests/$(requestId)).data.status in ['accepted', 'scheduled', 'in_progress'] &&
         request.resource.data.requestId == requestId;
@@ -662,15 +688,17 @@ service cloud.firestore {
         request.resource.data.requestId is string &&
         request.resource.data.chatId == request.resource.data.requestId &&
         request.resource.data.senderId == request.auth.uid &&
-        exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId)) &&
-        get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status in ['accepted', 'scheduled', 'in_progress'] &&
+        exists(/databases/$(database)/documents/requestChats/$(request.resource.data.chatId)) &&
+        get(/databases/$(database)/documents/requestChats/$(request.resource.data.chatId)).data.requestId == request.resource.data.requestId &&
+        isRequestChatParticipant(get(/databases/$(database)/documents/requestChats/$(request.resource.data.chatId)).data) &&
         ((isRole('caregiver') &&
-          isLinkedCaregiver(get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.createdBy) &&
-          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.caregiverId == request.auth.uid &&
-          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId) ||
+          get(/databases/$(database)/documents/requestChats/$(request.resource.data.chatId)).data.caregiverId == request.auth.uid &&
+          request.resource.data.audience == 'volunteer' &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requestChats/$(request.resource.data.chatId)).data.volunteerId) ||
          (isRole('volunteer') &&
-          get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.assignedVolunteerId == request.auth.uid &&
-          request.resource.data.userId == get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.caregiverId));
+          get(/databases/$(database)/documents/requestChats/$(request.resource.data.chatId)).data.volunteerId == request.auth.uid &&
+          request.resource.data.audience == 'caregiver' &&
+          request.resource.data.userId == get(/databases/$(database)/documents/requestChats/$(request.resource.data.chatId)).data.caregiverId));
       // An admin telling a volunteer how their verification was decided. The
       // stored verification status must already match the decision, so the
       // alert can never claim something the record does not say.

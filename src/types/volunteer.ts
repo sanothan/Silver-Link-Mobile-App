@@ -1,4 +1,5 @@
 import type { ActivityStatus } from './feedback';
+import type { NotificationType } from './notification';
 import { REQUEST_ACTIVITY_TYPES, type RequestActivityType } from './request';
 
 /** A terminal request belonging to the signed-in volunteer. */
@@ -60,6 +61,8 @@ export interface VolunteerImpact {
 export interface VolunteerUpdate {
   id: string;
   message: string;
+  type?: NotificationType;
+  requestId?: string;
   createdAt?: Date;
 }
 

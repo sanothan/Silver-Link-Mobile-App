@@ -2,6 +2,7 @@ import { collection, doc, getDoc, getDocs, limit, orderBy, query, where, type Do
 import { db } from './firebaseConfig';
 import { getVolunteerAvailability } from './volunteerAvailabilityService';
 import type { VolunteerActivity, VolunteerActivityStatus, VolunteerDashboardData, VolunteerOpportunity, VolunteerUpdate, VolunteerVerificationStatus } from '../types/volunteer';
+import type { NotificationType } from '../types/notification';
 import { deriveVolunteerImpact } from './volunteerImpactStats';
 
 const OPEN_REQUEST_STATUSES = ['pending', 'open', 'available'];
@@ -61,7 +62,13 @@ export async function getVolunteerDashboard(uid: string, userStatus?: string): P
   }).filter((item): item is VolunteerActivity => item !== null).sort((a, b) => (a.scheduledAt?.getTime() ?? Infinity) - (b.scheduledAt?.getTime() ?? Infinity));
   const updates: VolunteerUpdate[] = notificationSnapshots.map((snapshot) => {
     const data = snapshot.data();
-    return { id: snapshot.id, message: asText(data.message) || asText(data.title) || 'Volunteer activity update', createdAt: asDate(data.createdAt) };
+    return {
+      id: snapshot.id,
+      message: asText(data.message) || asText(data.title) || 'Volunteer activity update',
+      type: asText(data.type) as NotificationType | undefined,
+      requestId: asText(data.requestId),
+      createdAt: asDate(data.createdAt),
+    };
   });
 
   return { verificationStatus, impact, opportunities, nextActivity: activities[0] ?? null, availability, updates };

@@ -88,14 +88,19 @@ export async function getRequestChat(
   elderlyUserId?: string,
 ): Promise<{ request: CompanionshipRequest; chat: RequestChat | null; canSend: boolean }> {
   const request = await authorizedRequest(requestId, participantId, participantRole, elderlyUserId);
-  const caregiverId = request.caregiverId;
+  const snapshot = await getDoc(chatRef(requestId));
+  const existingChat = snapshot.exists() ? fromChatSnapshot(snapshot.data()) : null;
+  const caregiverId = participantRole === 'caregiver'
+    ? participantId
+    : existingChat?.caregiverId || request.caregiverId;
   const volunteerId = request.assignedVolunteerId;
   if (!caregiverId || !volunteerId)
-    return { request, chat: null, canSend: false };
+    return { request, chat: existingChat, canSend: false };
 
-  const snapshot = await getDoc(chatRef(requestId));
-  const chat = snapshot.exists() ? fromChatSnapshot(snapshot.data()) : null;
-  if (!chat && canChatForStatus(request.status)) {
+  if (existingChat && participantRole === 'caregiver' && existingChat.caregiverId !== participantId)
+    throw new Error('This conversation is linked to a different caregiver.');
+
+  if (!existingChat && canChatForStatus(request.status)) {
     const created: RequestChat = {
       requestId,
       elderlyUserId: request.createdBy,
@@ -109,7 +114,11 @@ export async function getRequestChat(
     }, { merge: true });
     return { request, chat: created, canSend: true };
   }
-  return { request, chat, canSend: canChatForStatus(request.status) };
+  return {
+    request,
+    chat: existingChat,
+    canSend: canChatForStatus(request.status) && Boolean(existingChat || caregiverId),
+  };
 }
 
 export function subscribeToRequestChat(
@@ -144,17 +153,31 @@ export async function sendRequestChatMessage({
   const cleanText = text.trim();
   if (!cleanText) throw new Error('Message cannot be empty.');
   const request = await authorizedRequest(requestId, senderId, senderRole, elderlyUserId);
-  if (!canChatForStatus(request.status) || !request.assignedVolunteerId || !request.caregiverId)
+  const existingSnapshot = await getDoc(chatRef(requestId));
+  const existingChat = existingSnapshot.exists()
+    ? fromChatSnapshot(existingSnapshot.data())
+    : null;
+  const caregiverId = senderRole === 'caregiver'
+    ? senderId
+    : existingChat?.caregiverId || request.caregiverId;
+  if (!canChatForStatus(request.status) || !request.assignedVolunteerId || !caregiverId)
     throw new Error('This conversation is no longer active.');
+  if (existingChat && (
+    existingChat.caregiverId !== caregiverId ||
+    existingChat.volunteerId !== request.assignedVolunteerId ||
+    existingChat.elderlyUserId !== request.createdBy
+  )) {
+    throw new Error('This conversation no longer matches the activity participants.');
+  }
 
   await setDoc(chatRef(requestId), {
     requestId,
     elderlyUserId: request.createdBy,
-    caregiverId: request.caregiverId,
+    caregiverId,
     volunteerId: request.assignedVolunteerId,
     updatedAt: serverTimestamp(),
   }, { merge: true });
-  const recipientId = senderRole === 'caregiver' ? request.assignedVolunteerId : request.caregiverId;
+  const recipientId = senderRole === 'caregiver' ? request.assignedVolunteerId : caregiverId;
   const message = await addDoc(messageCollection(requestId), {
     senderId,
     senderRole,
