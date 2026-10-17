@@ -1,6 +1,6 @@
 import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../context/AuthContext';
 import { doesRequestMatchActivityInterest, getMatchingRequestIds } from '../../../services/requestMatchingService';
@@ -20,6 +20,12 @@ export default function VolunteerRequestDetails() {
   const [interests, setInterests] = useState<string[]>([]);
   const [interestsError, setInterestsError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [acceptanceDialog, setAcceptanceDialog] = useState<
+    | { kind: 'confirm' }
+    | { kind: 'success' }
+    | { kind: 'error'; title: string; message: string }
+    | null
+  >(null);
   const withdrawing = useRef(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const load = useCallback(async () => {
@@ -46,17 +52,19 @@ export default function VolunteerRequestDetails() {
     if (!user || !id) return; setSaving(true);
     try {
       await acceptRequest(id, user.uid);
-      Alert.alert('Request Accepted', 'This activity has been added to your upcoming activities.', [
-        { text: 'View Upcoming Activities', onPress: () => router.replace('/(volunteer)/activities') },
-      ]);
+      setAcceptanceDialog({ kind: 'success' });
       void load();
     } catch (cause) {
       const message = cause instanceof RequestAcceptanceError ? cause.message : "We couldn't accept this request. Please try again.";
-      Alert.alert(cause instanceof RequestAcceptanceError && cause.reason === 'already-accepted' ? 'This request is no longer available.' : "We couldn't accept this request", message);
+      setAcceptanceDialog({
+        kind: 'error',
+        title: cause instanceof RequestAcceptanceError && cause.reason === 'already-accepted' ? 'This request is no longer available.' : "We couldn't accept this request",
+        message,
+      });
       void load();
     } finally { setSaving(false); }
   };
-  const confirmAccept = () => item && Alert.alert('Accept this request?', `${item.activityType} on ${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}.`, [{ text: 'Not now', style: 'cancel' }, { text: 'Accept', onPress: () => void accept() }]);
+  const confirmAccept = () => item && setAcceptanceDialog({ kind: 'confirm' });
 
   const withdraw = async () => {
     if (!user || !id || withdrawing.current || saving) return;
@@ -108,6 +116,48 @@ export default function VolunteerRequestDetails() {
         <Text style={[styles.chatActionText, { color: colors.error }]}>{isWithdrawing ? 'Withdrawing...' : 'Withdraw From Activity'}</Text>
       </Pressable> : null}
     </ScrollView>
+    <Modal visible={acceptanceDialog !== null} transparent animationType="fade" onRequestClose={() => setAcceptanceDialog(null)}>
+      <View style={acceptanceStyles.backdrop}>
+        <View style={acceptanceStyles.card}>
+          <Text style={acceptanceStyles.title}>
+            {acceptanceDialog?.kind === 'confirm'
+              ? 'Accept this request?'
+              : acceptanceDialog?.kind === 'success'
+                ? 'Request accepted'
+                : acceptanceDialog?.kind === 'error'
+                  ? acceptanceDialog.title
+                  : ''}
+          </Text>
+          <Text style={acceptanceStyles.body}>
+            {acceptanceDialog?.kind === 'confirm'
+              ? `${item.activityType} on ${item.preferredDate.toLocaleDateString()} at ${item.preferredTime}.`
+              : acceptanceDialog?.kind === 'success'
+                ? 'This activity has been added to your upcoming activities.'
+                : acceptanceDialog?.kind === 'error'
+                  ? acceptanceDialog.message
+                  : ''}
+          </Text>
+          {acceptanceDialog?.kind === 'confirm' ? (
+            <View style={acceptanceStyles.actions}>
+              <Pressable accessibilityRole="button" style={acceptanceStyles.cancelButton} onPress={() => setAcceptanceDialog(null)}>
+                <Text style={acceptanceStyles.cancelText}>Not now</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={saving} style={[acceptanceStyles.confirmButton, saving && styles.disabled]} onPress={() => { setAcceptanceDialog(null); void accept(); }}>
+                <Text style={acceptanceStyles.confirmText}>{saving ? 'Accepting…' : 'Accept'}</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable accessibilityRole="button" style={acceptanceStyles.confirmButton} onPress={() => {
+              const accepted = acceptanceDialog?.kind === 'success';
+              setAcceptanceDialog(null);
+              if (accepted) router.replace('/(volunteer)/activities');
+            }}>
+              <Text style={acceptanceStyles.confirmText}>{acceptanceDialog?.kind === 'success' ? 'View Upcoming Activities' : 'Close'}</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    </Modal>
   </SafeAreaView>;
 }
 
@@ -115,3 +165,15 @@ function Section({ label, value }: { label: string; value: string }) { return <V
 function Center({ children }: { children: React.ReactNode }) { return <SafeAreaView style={styles.safe}><View style={styles.center}>{children}</View></SafeAreaView>; }
 
 const styles = StyleSheet.create({ safe: { flex: 1, backgroundColor: colors.background }, content: { padding: 20, paddingBottom: 40, gap: 12 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 25 }, back: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' }, link: { color: colors.primary, fontSize: 16, fontWeight: '800' }, title: { color: colors.textPrimary, fontSize: 28, fontWeight: '800', textAlign: 'center' }, body: { color: colors.textSecondary, fontSize: 17, lineHeight: 24, textAlign: 'center', marginTop: 10 }, status: { alignSelf: 'flex-start', borderRadius: 999, backgroundColor: colors.primaryLight, paddingHorizontal: 13, paddingVertical: 8, marginBottom: 8 }, statusText: { color: colors.primaryDark, fontSize: 15, fontWeight: '800' }, card: { backgroundColor: colors.surface, borderRadius: 17, borderWidth: 1, borderColor: colors.border, padding: 17 }, label: { color: colors.textSecondary, fontSize: 13, fontWeight: '800', letterSpacing: 0.6 }, value: { color: colors.textPrimary, fontSize: 18, lineHeight: 25, fontWeight: '700', marginTop: 6 }, availabilityStatus: { borderRadius: 14, padding: 14 }, availabilityMatch: { backgroundColor: colors.successLight }, availabilityOutside: { backgroundColor: colors.primaryLight }, availabilityStatusText: { fontSize: 16, lineHeight: 22, fontWeight: '800' }, availabilityMatchText: { color: colors.success }, availabilityOutsideText: { color: colors.primaryDark }, action: { minHeight: 58, borderRadius: 15, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 8 }, actionText: { color: colors.textOnPrimary, fontSize: 18, fontWeight: '800' }, chatAction: { minHeight: 56, borderRadius: 15, borderWidth: 2, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 8 }, chatActionText: { color: colors.primary, fontSize: 18, fontWeight: '800' }, disabled: { opacity: 0.55 } });
+
+const acceptanceStyles = StyleSheet.create({
+  backdrop: { flex: 1, justifyContent: 'center', padding: 22, backgroundColor: colors.overlay },
+  card: { padding: 20, borderRadius: 20, backgroundColor: colors.surface },
+  title: { color: colors.textPrimary, fontSize: 20, lineHeight: 26, fontWeight: '900' },
+  body: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, marginTop: 8 },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  cancelButton: { flex: 1, minHeight: 50, borderWidth: 1, borderColor: colors.border, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { color: colors.textSecondary, fontSize: 15, fontWeight: '800' },
+  confirmButton: { flex: 1, minHeight: 50, marginTop: 20, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  confirmText: { color: colors.textOnPrimary, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+});
